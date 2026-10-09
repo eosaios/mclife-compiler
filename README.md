@@ -9,16 +9,22 @@ Bug 清单、编译日志、运行状态评分，以及一份来自麦当劳官�
 ```
 $ mclife "今天加班到凌晨，修了十几个 Bug，明天还要开会，预算只有 30 元。"
 
-  20:53:42 [INFO]  Loading Life Runtime...
-  20:53:42 [INFO]  Runtime version: human/1.0.0 (kernel: OVERTIME_NIGHT)
-  20:53:42 [INFO]  Detected mood=EXHAUSTED energy=2/10 hunger=UNKNOWN
-  20:53:42 [ERROR] Energy buffer underflow detected  (life://energy-underflow)
+# 以下输出全部来自麦当劳官方 MCP Server 真实调用（2026-10-09 21:41）
+
+  21:41:08 [INFO]  Loading Life Runtime...
+  21:41:08 [INFO]  Runtime version: human/1.0.0 (kernel: OVERTIME_NIGHT)
+  21:41:08 [INFO]  Detected mood=EXHAUSTED energy=2/10 hunger=UNKNOWN
+  21:41:08 [INFO]  Server time resolved via mcd-mcp::now-time-info -> DINNER
+  21:41:08 [ERROR] Energy buffer underflow detected  (life://energy-underflow)
   20:53:42 [ERROR] Sleep dependency is stale  (life://sleep-dependency-stale)
   20:53:42 [ERROR] Workload exceeded recommended threshold  (life://overtime-overflow)
   20:53:42 [INFO]  Resolving McDonald's resources via mcd-mcp...
-  20:53:42 [SUCCESS] mcp.list-nutrition-foods -> 48 条真实营养数据
-  20:53:42 [SUCCESS] mcp.campaign-calendar -> 5 个当月活动
-  20:53:42 [SUCCESS] mcp.query-my-coupons -> 3 张可用券
+  21:41:08 [SUCCESS] mcp.now-time-info -> DINNER @21:00 2026-10-09
+  21:41:08 [SUCCESS] mcp.list-nutrition-foods -> 160 条真实营养数据
+  21:41:08 [SUCCESS] mcp.campaign-calendar -> 30 个活动（2026年10月7日 往期回顾 等）
+  21:41:08 [SUCCESS] mcp.query-my-coupons -> 账户当前无已持有券
+  21:41:08 [SUCCESS] mcp.available-coupons -> 9 张可领券
+  21:41:08 [SUCCESS] mcp.query-my-account -> 可用积分 0 麦享会积分
   20:53:42 [INFO]  Linking happiness dependency...
   20:53:42 [SUCCESS] Recovery plan generated
 
@@ -29,8 +35,9 @@ $ mclife "今天加班到凌晨，修了十几个 Bug，明天还要开会，预
   ✖  1. ENERGY_UNDERFLOW  精力不足
   ✖  2. SLEEP_DEPENDENCY_STALE  睡眠依赖过期
   ✖  3. OVERTIME_OVERFLOW  加班溢出
-  ⚠  4. REQUIREMENT_RECURSION  需求无限递归
+  ⚠  4. HUNGRY_VALUE_UNDEFINED  饥饿值未定义
   ⚠  5. HAPPINESS_NOT_FOUND  快乐依赖缺失
+  ℹ  6. BUDGET_CONSTRAINT_ACTIVE  预算约束生效
 
   人生不一定能一次编译通过，但快乐可以持续集成。
 ```
@@ -173,16 +180,32 @@ node scripts/mclife.mjs --tools
 | 1 | ERROR | `ENERGY_UNDERFLOW` | 精力不足 |
 | 2 | ERROR | `SLEEP_DEPENDENCY_STALE` | 睡眠依赖过期 |
 | 3 | ERROR | `OVERTIME_OVERFLOW` | 加班溢出 |
-| 4 | WARN | `REQUIREMENT_RECURSION` | 需求无限递归 |
+| 4 | WARN | `HUNGRY_VALUE_UNDEFINED` | 饥饿值未定义 |
 | 5 | WARN | `HAPPINESS_NOT_FOUND` | 快乐依赖缺失 |
+| 6 | INFO | `BUDGET_CONSTRAINT_ACTIVE` | 预算约束生效 |
 
 ### 麦麦补给方案（MCP 真实数据）
 
-- **主食组合** — 目标能量 995 kcal，按真实营养数据选出 Top-3 组合，报告缺口
-- **预算与优惠** — 查询账户真实持有券，按门槛 ≤ ¥30 过滤出真正用得上的
-- **快乐依赖** — 当月真实在售活动
-- **时段策略** — MCP 服务端权威时间判定
-- **积分路径** — 提示即将过期积分
+```
+── 主食组合 · 高能量密度组合（真实营养数据驱动）
+   主料：专"薯鱼"你 — 463 kcal / 蛋白质 18g（命中你的 LATE_NIGHT 偏好）
+   搭配：大薯条（379 kcal · LATE_NIGHT）、中薯条（289 kcal · LATE_NIGHT）
+   合计 1131 kcal / 蛋白 28g / 脂肪 45g / 钠 1033mg
+   [MCP] mcd-mcp::list-nutrition-foods
+   理由: 目标能量约 920 kcal，该组合提供 1131 kcal，已在合理区间内。
+         官方营养表共 160 条，本次全部从中选取，未引入任何表外条目。
+
+── 预算与优惠 · 预算 ¥30
+   账户当前没有已持有的优惠券（真实查询结果）。
+   另有 9 张券当前可领取 —— 这是最直接的省钱动作
+── 快乐依赖 · HAPPINESS_NOT_FOUND 修复方案
+   当月真实活动中可关注：超值9.9元早餐两件套陪你开工啦😋、麦当劳 X PEACEMINUSONE...
+── 时段策略 · 当前时段：DINNER
+   晚餐时段：适合正餐组合，堂食/取餐柜取餐更快。
+── 积分路径 · 账户积分状态
+   可用积分 0 麦享会积分，累计获得 384.6。
+   已有 384.6 积分过期 —— 这就是「依赖版本过期」的代价。
+```
 
 > 每一块都标注了 `[MCP]` 数据来源和 `[AI]` 创意部分。
 > 失败的调用会进入「未验证声明」，明确告知哪些结论缺少真实数据支撑。
@@ -272,14 +295,20 @@ mclife-compiler/
 node tests/test.mjs
 
 # 输出示例
-✓ 通过 46  失败 0
+✓ 通过 59  失败 0
 ```
 
 测试覆盖：预算解析（阿拉伯/中文数字/缺失）、疲劳阈值、情绪联动推断、
-Bug 检出与排序、营养推荐不越界、券门槛过滤、报告渲染、XSS 转义、空输入与超长输入边界。
+Bug 检出与排序、**官方三种返回格式解析**、**偏好优先级（含「不辣」互斥消歧）**、
+**能量缺口控制（不超目标 125%）**、券门槛过滤、报告渲染、XSS 转义、
+空输入与超长输入边界。
+
+其中 13 项是从**真实 MCP 返回样本**中提取的回归测试 —— 包括官方自定义表格格式
+`[160]{productName,energyKcal,...}`、Markdown 活动/券格式、`availablePoint` 积分字段。
 
 **技术栈**：Node.js 标准库，零运行时依赖。MCP 客户端为手写实现
-（Streamable HTTP + SSE 解析 + Session 管理），不引入第三方 MCP SDK。
+（Streamable HTTP + SSE 解析 + Session 管理 + 三种返回格式归一化），
+不引入第三方 MCP SDK。
 
 ---
 

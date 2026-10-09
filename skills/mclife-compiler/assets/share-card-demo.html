@@ -164,28 +164,33 @@
 
     <p class="sec-title">麦麦补给方案</p>
       <section class="block">
-        <h3>主食组合<small>营养数据不可用</small></h3>
-        <ul><li>list-nutrition-foods 未返回可用数据，本次不做营养维度推荐。</li></ul>
-        
+        <h3>主食组合<small>高能量密度组合（真实营养数据驱动）</small></h3>
+        <ul><li>主料：专“薯鱼”你 — 463 kcal / 蛋白质 18g（命中你的 LATE_NIGHT 偏好）</li><li>搭配：大薯条（379 kcal · LATE_NIGHT）、小薯条（210 kcal · LATE_NIGHT）</li><li>合计 1052 kcal / 蛋白 27g / 脂肪 42g / 钠 988mg</li></ul>
+        <p class="src">[MCP] mcd-mcp::list-nutrition-foods</p>
       </section>
       <section class="block">
         <h3>预算与优惠<small>预算 ¥30</small></h3>
-        <ul><li>未能获取账户优惠券信息（需有效 Token）。</li><li>未执行 calculate-price（需先确定门店与具体商品），价格请以官方 App/小程序为准。</li></ul>
-        
+        <ul><li>账户当前没有已持有的优惠券（真实查询结果）。</li><li>另有 9 张券当前可领取 —— 这是最直接的省钱动作，例：麦旋风任选、巧克力味厚松饼猪柳蛋套餐</li><li>未执行 calculate-price（需先确定门店与具体商品），实时价格请以官方 App/小程序为准。</li></ul>
+        <p class="src">[MCP] mcd-mcp::available-coupons</p>
       </section>
       <section class="block">
         <h3>快乐依赖<small>HAPPINESS_NOT_FOUND 修复方案</small></h3>
-        <ul><li>活动日历不可用，无法给出真实活动推荐。</li></ul>
-        
+        <ul><li>当月真实活动中可关注：</li><li>  · 超值𝟗.𝟗元早餐两件套陪你开工啦😋 —— 早八的快乐，一堡一咖已就位🍔☕ 𝟏𝟎月𝟖日至𝟏𝟎月𝟐𝟏日 🍔周一至周五早餐堡轮流上（2026年10月7日 往期回顾）</li><li>  · 麦当劳 X PEACEMINUSONE —— GD同款联名复古棒球帽 任意餐品消费加39.9元即可得 经典红黄配色搭配复古轮廓，MV同款灵感重现 （2026年10月8日 往期回顾）</li><li>  · 麦咖啡一早现磨🥳元气早餐震撼来袭！ —— ☕甄选 2024IIAC 国际咖啡品鉴大赛“金奖“咖啡豆 🥪多款人气早餐主食随心挑选，满足你的多种（2026年10月8日 往期回顾）</li></ul>
+        <p class="src">[MCP] mcd-mcp::campaign-calendar</p>
       </section>
       <section class="block">
-        <h3>时段策略<small>当前时段：本地推断（MCP 时间不可用）</small></h3>
-        <ul><li>按常规时段处理。</li></ul>
-        
+        <h3>时段策略<small>当前时段：DINNER</small></h3>
+        <ul><li>晚餐时段：适合正餐组合，堂食/取餐柜取餐更快。</li></ul>
+        <p class="src">[MCP] mcd-mcp::now-time-info</p>
+      </section>
+      <section class="block">
+        <h3>积分路径<small>账户积分状态</small></h3>
+        <ul><li>可用积分 0 麦享会积分，累计获得 384.6。</li><li>已有 384.6 积分过期 —— 这就是「依赖版本过期」的代价。</li></ul>
+        <p class="src">[MCP] mcd-mcp::query-my-account</p>
       </section>
 
     <div class="art"><div class="burger">🍔 🍟 🥤</div></div>
-    <p class="summary">别怕 timeout，先把能量依赖装上。</p>
+    <p class="summary">人生不一定能一次编译通过，但快乐可以持续集成。</p>
   </div>
 
   <div class="footer">

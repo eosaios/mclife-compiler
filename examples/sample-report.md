@@ -12,27 +12,32 @@ mood          : 电量见底
 scenario      : 深夜加班
 hunger        : UNKNOWN
 budget        : ¥30
-detected at   : 未知
+detected at   : DINNER（来源：MCP now-time-info）
 ```
 
 ## 编译日志
 
 ```text
-21:00:08 [INFO]  Loading Life Runtime...
-21:00:08 [INFO]  Runtime version: human/1.0.0 (kernel: OVERTIME_NIGHT)
-21:00:08 [INFO]  Detected mood=EXHAUSTED energy=2/10 hunger=UNKNOWN
-21:00:08 [WARN]  now-time-info unavailable, time slot inferred locally (降低置信度)
-21:00:08 [INFO]  Budget constraint: ¥30
-21:00:08 [ERROR] Energy buffer underflow detected  (life://energy-underflow)
-21:00:08 [ERROR] Sleep dependency is stale, cache miss on recovery  (life://sleep-dependency-stale)
-21:00:08 [ERROR] Workload exceeded recommended threshold  (life://overtime-overflow)
-21:00:08 [WARN] Hunger variable is undefined, using safe default  (life://hungry-value-undefined)
-21:00:08 [WARN] Happiness dependency missing, falling back to default joy  (life://happiness-not-found)
-21:00:08 [INFO] Budget constraint active, optimizing for cost  (life://budget-constraint-active)
-21:00:08 [INFO]  Resolving McDonald's resources via mcd-mcp...
-21:00:08 [FAIL] mcp.(skipped) -> 未配置 MCD_MCP_TOKEN，本次为离线编译                                   
-21:00:08 [INFO]  Linking happiness dependency...
-21:00:08 [SUCCESS] Recovery plan generated
+21:45:21 [INFO]  Loading Life Runtime...
+21:45:21 [INFO]  Runtime version: human/1.0.0 (kernel: OVERTIME_NIGHT)
+21:45:21 [INFO]  Detected mood=EXHAUSTED energy=2/10 hunger=UNKNOWN
+21:45:21 [INFO]  Server time resolved via mcd-mcp::now-time-info -> DINNER
+21:45:21 [INFO]  Budget constraint: ¥30
+21:45:21 [ERROR] Energy buffer underflow detected  (life://energy-underflow)
+21:45:21 [ERROR] Sleep dependency is stale, cache miss on recovery  (life://sleep-dependency-stale)
+21:45:21 [ERROR] Workload exceeded recommended threshold  (life://overtime-overflow)
+21:45:21 [WARN] Hunger variable is undefined, using safe default  (life://hungry-value-undefined)
+21:45:21 [WARN] Happiness dependency missing, falling back to default joy  (life://happiness-not-found)
+21:45:21 [INFO] Budget constraint active, optimizing for cost  (life://budget-constraint-active)
+21:45:21 [INFO]  Resolving McDonald's resources via mcd-mcp...
+21:45:21 [SUCCESS] mcp.now-time-info -> DINNER @21:00 2026-10-09                                    
+21:45:21 [SUCCESS] mcp.list-nutrition-foods -> 160 条真实营养数据                                                 
+21:45:21 [SUCCESS] mcp.campaign-calendar -> 30 个活动（2026年10月7日 往期回顾 等）                                   
+21:45:21 [SUCCESS] mcp.query-my-coupons -> 账户当前无已持有券                                                   
+21:45:21 [SUCCESS] mcp.available-coupons -> 9 张可领券                                                      
+21:45:21 [SUCCESS] mcp.query-my-account -> 可用积分 0 麦享会积分                                                
+21:45:21 [INFO]  Linking happiness dependency...
+21:45:21 [SUCCESS] Recovery plan generated
 
 BUILD FAILED — recoverable
 runtime score: 21/100 (娱乐用途)  |  电量见底 · 深夜加班
@@ -58,31 +63,51 @@ runtime score: 21/100 (娱乐用途)  |  电量见底 · 深夜加班
 
 ## 麦麦补给方案
 
-### 主食组合 · 营养数据不可用
+### 主食组合 · 高能量密度组合（真实营养数据驱动）
 
-- list-nutrition-foods 未返回可用数据，本次不做营养维度推荐。
+- 主料：专“薯鱼”你 — 463 kcal / 蛋白质 18g（命中你的 LATE_NIGHT 偏好）
+- 搭配：大薯条（379 kcal · LATE_NIGHT）、小薯条（210 kcal · LATE_NIGHT）
+- 合计 1052 kcal / 蛋白 27g / 脂肪 42g / 钠 988mg
 
-> **理由**：不编造营养数据。
+> `[MCP]` 本节数据来自：mcd-mcp::list-nutrition-foods
+> **理由**：目标能量约 860 kcal（按你的疲劳度与饥饿度推算，上限 1100 kcal），该组合提供 1052 kcal，已在合理区间内（不超目标 25%，即 1075 kcal）。 官方营养表共 160 条，本次全部从中选取，未引入任何表外条目。
+> `[AI]` 用「能量缺口 / 蛋白质密度」这些工程指标解释「为什么现在该吃这个」，是本项目的创意表达部分。
 
 ### 预算与优惠 · 预算 ¥30
 
-- 未能获取账户优惠券信息（需有效 Token）。
-- 未执行 calculate-price（需先确定门店与具体商品），价格请以官方 App/小程序为准。
+- 账户当前没有已持有的优惠券（真实查询结果）。
+- 另有 9 张券当前可领取 —— 这是最直接的省钱动作，例：麦旋风任选、巧克力味厚松饼猪柳蛋套餐
+- 未执行 calculate-price（需先确定门店与具体商品），实时价格请以官方 App/小程序为准。
 
+> `[MCP]` 本节数据来自：mcd-mcp::available-coupons
 > **理由**：本项目不编造实时价格。
 
 ### 快乐依赖 · HAPPINESS_NOT_FOUND 修复方案
 
-- 活动日历不可用，无法给出真实活动推荐。
+- 当月真实活动中可关注：
+-   · 超值𝟗.𝟗元早餐两件套陪你开工啦😋 —— 早八的快乐，一堡一咖已就位🍔☕ 𝟏𝟎月𝟖日至𝟏𝟎月𝟐𝟏日 🍔周一至周五早餐堡轮流上（2026年10月7日 往期回顾）
+-   · 麦当劳 X PEACEMINUSONE —— GD同款联名复古棒球帽 任意餐品消费加39.9元即可得 经典红黄配色搭配复古轮廓，MV同款灵感重现 （2026年10月8日 往期回顾）
+-   · 麦咖啡一早现磨🥳元气早餐震撼来袭！ —— ☕甄选 2024IIAC 国际咖啡品鉴大赛“金奖“咖啡豆 🥪多款人气早餐主食随心挑选，满足你的多种（2026年10月8日 往期回顾）
 
-> **理由**：不编造活动。
+> `[MCP]` 本节数据来自：mcd-mcp::campaign-calendar
+> **理由**：活动信息来自官方活动日历的真实返回，而非编造。
 > `[AI]` 把「吃点好的」翻译成「注入一个即时愉悦因子」，是编译器隐喻的落点。
 
-### 时段策略 · 当前时段：本地推断（MCP 时间不可用）
+### 时段策略 · 当前时段：DINNER
 
-- 按常规时段处理。
+- 晚餐时段：适合正餐组合，堂食/取餐柜取餐更快。
 
-> **理由**：MCP 时间调用失败，此处为本地推断，置信度较低。
+> `[MCP]` 本节数据来自：mcd-mcp::now-time-info
+> **理由**：时段判定使用 MCP 服务端返回的时间（2026-10-09 21:00），避免客户端时钟偏差。
+
+### 积分路径 · 账户积分状态
+
+- 可用积分 0 麦享会积分，累计获得 384.6。
+- 已有 384.6 积分过期 —— 这就是「依赖版本过期」的代价。
+
+> `[MCP]` 本节数据来自：mcd-mcp::query-my-account
+> **理由**：过期积分是最容易白白浪费的资产；本项目不会自动兑换或抽奖。
+> `[AI]` 把「积分过期」类比成「依赖版本过期」。
 
 ## MCP 调用记录
 

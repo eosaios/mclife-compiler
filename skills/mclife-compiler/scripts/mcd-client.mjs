@@ -221,7 +221,9 @@ export class McdMcpClient {
   }
 }
 
-/** 把 MCP content[] 结构解包成 JS 值 */
+/**
+ * 把 MCP content[] 结构解包成 JS 值
+ */
 export function normalizeToolResult(result) {
   const contents = result?.content || [];
   const texts = [];
@@ -231,20 +233,130 @@ export function normalizeToolResult(result) {
     else if (c.type === 'image') images.push({ mimeType: c.mimeType, dataLength: (c.data || '').length });
   }
   const raw = texts.join('\n');
-  let data = raw;
-  if (raw) {
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      /* 保留原始文本 */
-    }
-  }
   return {
     isError: Boolean(result?.isError),
     rawText: raw,
-    data,
+    data: parseMcdPayload(raw),
     images,
   };
+}
+
+/**
+ * 麦当劳 MCP Server 的返回并非统一的标准 JSON。实测（v1.0.0）有三种格式：
+ *
+ *   A) 标准 JSON
+ *      {"success":true,"code":200,"data":{...}}
+ *      例：query-my-account
+ *
+ *   B) JSON 包裹的自定义序列化表格
+ *      前置一段 "## Response Structure" 字段说明 + "## Original Response" 后的 JSON，
+ *      其中 data 是字符串："[160]{a,b,c}:\n  值1,值2,值3\n  ..."
+ *      例：list-nutrition-foods
+ *
+ *   C) Markdown 文本
+ *      "#### 2026年10月7日 往期回顾\n\n-   **活动标题**：xxx\n    **活动内容介绍**：yyy"
+ *      例：campaign-calendar / available-coupons / query-my-coupons
+ *
+ * 本函数统一归一化为 { format, json, table, markdown }，
+ * 业务语义解析交给 mcd-resolver.mjs，职责分离。
+ */
+export function parseMcdPayload(raw) {
+  const text = String(raw || '');
+  if (!text.trim()) return { format: 'empty', json: null, table: null, markdown: null };
+
+  // 剥离 "## Original Response" 包装（格式 B 的前缀说明块）
+  let body = text;
+  const origIdx = text.indexOf('## Original Response');
+  if (origIdx >= 0) {
+    body = text.slice(origIdx + '## Original Response'.length).trim();
+  }
+
+  // 尝试截出第一个括号平衡的 JSON
+  const jsonSlice = extractFirstJsonObject(body);
+  if (jsonSlice) {
+    try {
+      const parsed = JSON.parse(jsonSlice);
+      if (parsed?.success === false || (parsed?.code && parsed.code !== 200)) {
+        return { format: 'json-error', json: parsed, table: null, markdown: text };
+      }
+      // parsed.data 可能是自定义表格字符串
+      if (typeof parsed?.data === 'string' && /^\s*\[\d+\]\s*\{/.test(parsed.data)) {
+        return { format: 'table-json', json: parsed, table: parseMcdTable(parsed.data), markdown: null };
+      }
+      return { format: 'json', json: parsed, table: null, markdown: text };
+    } catch {
+      /* 落到格式 B 兜底 */
+    }
+  }
+
+  // 格式 B 兜底：裸的 [N]{...}: 表格
+  const tableMatch = body.match(/\[\d+\]\s*\{[^}]*}\s*:/);
+  if (tableMatch) {
+    return { format: 'table-raw', json: null, table: parseMcdTable(body.slice(tableMatch.index)), markdown: null };
+  }
+
+  // 格式 C：Markdown
+  return { format: 'markdown', json: null, table: null, markdown: text };
+}
+
+/** 从文本中截出第一个括号平衡的 JSON 对象/数组（正确跳过字符串内的括号） */
+function extractFirstJsonObject(text) {
+  const start = text.search(/[{[]/);
+  if (start < 0) return null;
+  const open = text[start];
+  const close = open === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/**
+ * 解析麦当劳自定义表格格式
+ *   输入: "[160]{productName,nutritionDescription,energyKcal,protein}:\n  猪柳麦满分,null,308,16\n  ..."
+ *   输出: { count, fields: [...], rows: [{...}, ...] }
+ *
+ * 已知限制：不支持字段值内含逗号。
+ *   实测官方营养表与券表中未出现该情况；
+ *   若未来出现，需按官方格式升级为支持引号转义的解析。
+ */
+export function parseMcdTable(text) {
+  const raw = String(text || '').trim();
+  const headerMatch = raw.match(/^\s*\[(\d+)\]\s*\{([^}]*)}\s*:?\s*([\s\S]*)$/);
+  if (!headerMatch) return null;
+
+  const declaredCount = Number(headerMatch[1]);
+  const fields = headerMatch[2].split(',').map((s) => s.trim());
+  const body = headerMatch[3] || '';
+
+  const rows = [];
+  for (const line of body.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const cells = t.split(',');
+    // 列数不匹配的行是说明/表头噪声，直接跳过
+    if (cells.length !== fields.length) continue;
+    const row = {};
+    fields.forEach((f, i) => {
+      const v = cells[i].trim();
+      row[f] = v === 'null' || v === '' ? null : v;
+    });
+    rows.push(row);
+  }
+
+  return { count: declaredCount, fields, rows };
 }
 
 /**

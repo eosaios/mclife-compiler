@@ -1,28 +1,33 @@
 
 [1m[36m  McLife Compiler[0m [90m// 麦麦人生编译器 v1.0.0[0m
 [90m  ─────────────────────────────────────────────[0m
-  [90m时间[0m   [33m未知[0m
+  [90m时间[0m   DINNER [90m(MCP)[0m
   [90m状态[0m   [1mBUILD FAILED — recoverable[0m
   [90m评分[0m   21/100 [90m(娱乐用途)[0m
   [90m解读[0m   电量见底 · 深夜加班 · 能量 2/10 · 饥饿 UNKNOWN
   [90m预算[0m   ¥30
 
 [1m  编译日志[0m
-  21:00:08 [36m[INFO][0m  Loading Life Runtime...
-  21:00:08 [36m[INFO][0m  Runtime version: human/1.0.0 (kernel: OVERTIME_NIGHT)
-  21:00:08 [36m[INFO][0m  Detected mood=EXHAUSTED energy=2/10 hunger=UNKNOWN
-  21:00:08 [33m[WARN][0m  now-time-info unavailable, time slot inferred locally (降低置信度)
-  21:00:08 [36m[INFO][0m  Budget constraint: ¥30
-  21:00:08 [31m[ERROR][0m Energy buffer underflow detected  (life://energy-underflow)
-  21:00:08 [31m[ERROR][0m Sleep dependency is stale, cache miss on recovery  (life://sleep-dependency-stale)
-  21:00:08 [31m[ERROR][0m Workload exceeded recommended threshold  (life://overtime-overflow)
-  21:00:08 [33m[WARN][0m Hunger variable is undefined, using safe default  (life://hungry-value-undefined)
-  21:00:08 [33m[WARN][0m Happiness dependency missing, falling back to default joy  (life://happiness-not-found)
-  21:00:08 [36m[INFO][0m Budget constraint active, optimizing for cost  (life://budget-constraint-active)
-  21:00:08 [36m[INFO][0m  Resolving McDonald's resources via mcd-mcp...
-  21:00:08 [31m[FAIL][0m mcp.(skipped) -> 未配置 MCD_MCP_TOKEN，本次为离线编译                                   
-  21:00:08 [36m[INFO][0m  Linking happiness dependency...
-  21:00:08 [32m[SUCCESS][0m Recovery plan generated
+  21:45:19 [36m[INFO][0m  Loading Life Runtime...
+  21:45:19 [36m[INFO][0m  Runtime version: human/1.0.0 (kernel: OVERTIME_NIGHT)
+  21:45:19 [36m[INFO][0m  Detected mood=EXHAUSTED energy=2/10 hunger=UNKNOWN
+  21:45:19 [36m[INFO][0m  Server time resolved via mcd-mcp::now-time-info -> DINNER
+  21:45:19 [36m[INFO][0m  Budget constraint: ¥30
+  21:45:19 [31m[ERROR][0m Energy buffer underflow detected  (life://energy-underflow)
+  21:45:19 [31m[ERROR][0m Sleep dependency is stale, cache miss on recovery  (life://sleep-dependency-stale)
+  21:45:19 [31m[ERROR][0m Workload exceeded recommended threshold  (life://overtime-overflow)
+  21:45:19 [33m[WARN][0m Hunger variable is undefined, using safe default  (life://hungry-value-undefined)
+  21:45:19 [33m[WARN][0m Happiness dependency missing, falling back to default joy  (life://happiness-not-found)
+  21:45:19 [36m[INFO][0m Budget constraint active, optimizing for cost  (life://budget-constraint-active)
+  21:45:19 [36m[INFO][0m  Resolving McDonald's resources via mcd-mcp...
+  21:45:19 [32m[SUCCESS][0m mcp.now-time-info -> DINNER @21:00 2026-10-09                                    
+  21:45:19 [32m[SUCCESS][0m mcp.list-nutrition-foods -> 160 条真实营养数据                                                 
+  21:45:19 [32m[SUCCESS][0m mcp.campaign-calendar -> 30 个活动（2026年10月7日 往期回顾 等）                                   
+  21:45:19 [32m[SUCCESS][0m mcp.query-my-coupons -> 账户当前无已持有券                                                   
+  21:45:19 [32m[SUCCESS][0m mcp.available-coupons -> 9 张可领券                                                      
+  21:45:19 [32m[SUCCESS][0m mcp.query-my-account -> 可用积分 0 麦享会积分                                                
+  21:45:19 [36m[INFO][0m  Linking happiness dependency...
+  21:45:19 [32m[SUCCESS][0m Recovery plan generated
   
   [33m[1mBUILD FAILED — recoverable[0m
   [90mruntime score: 21/100 (娱乐用途)  |  电量见底 · 深夜加班[0m
@@ -48,22 +53,39 @@
       [32mfix:[0m 优先使用可用优惠后再下单
 
 [1m  麦麦补给方案[0m
-  [90m──[0m [1m主食组合[0m [90m· 营养数据不可用[0m
-     list-nutrition-foods 未返回可用数据，本次不做营养维度推荐。
-     [90m理由:[0m 不编造营养数据。
+  [90m──[0m [1m主食组合[0m [90m· 高能量密度组合（真实营养数据驱动）[0m
+     主料：专“薯鱼”你 — 463 kcal / 蛋白质 18g（命中你的 LATE_NIGHT 偏好）
+     搭配：大薯条（379 kcal · LATE_NIGHT）、小薯条（210 kcal · LATE_NIGHT）
+     合计 1052 kcal / 蛋白 27g / 脂肪 42g / 钠 988mg
+     [90m[MCP] mcd-mcp::list-nutrition-foods[0m
+     [90m理由:[0m 目标能量约 860 kcal（按你的疲劳度与饥饿度推算，上限 1100 kcal），该组合提供 1052 kcal，已在合理区间内（不超目标 25%，即 1075 kcal）。 官方营养表共 160 条，本次全部从中选取，未引入任何表外条目。
+     [90m创意:[0m 用「能量缺口 / 蛋白质密度」这些工程指标解释「为什么现在该吃这个」，是本项目的创意表达部分。
   [90m──[0m [1m预算与优惠[0m [90m· 预算 ¥30[0m
-     未能获取账户优惠券信息（需有效 Token）。
-     未执行 calculate-price（需先确定门店与具体商品），价格请以官方 App/小程序为准。
+     账户当前没有已持有的优惠券（真实查询结果）。
+     另有 9 张券当前可领取 —— 这是最直接的省钱动作，例：麦旋风任选、巧克力味厚松饼猪柳蛋套餐
+     未执行 calculate-price（需先确定门店与具体商品），实时价格请以官方 App/小程序为准。
+     [90m[MCP] mcd-mcp::available-coupons[0m
      [90m理由:[0m 本项目不编造实时价格。
   [90m──[0m [1m快乐依赖[0m [90m· HAPPINESS_NOT_FOUND 修复方案[0m
-     活动日历不可用，无法给出真实活动推荐。
-     [90m理由:[0m 不编造活动。
+     当月真实活动中可关注：
+       · 超值𝟗.𝟗元早餐两件套陪你开工啦😋 —— 早八的快乐，一堡一咖已就位🍔☕ 𝟏𝟎月𝟖日至𝟏𝟎月𝟐𝟏日 🍔周一至周五早餐堡轮流上（2026年10月7日 往期回顾）
+       · 麦当劳 X PEACEMINUSONE —— GD同款联名复古棒球帽 任意餐品消费加39.9元即可得 经典红黄配色搭配复古轮廓，MV同款灵感重现 （2026年10月8日 往期回顾）
+       · 麦咖啡一早现磨🥳元气早餐震撼来袭！ —— ☕甄选 2024IIAC 国际咖啡品鉴大赛“金奖“咖啡豆 🥪多款人气早餐主食随心挑选，满足你的多种（2026年10月8日 往期回顾）
+     [90m[MCP] mcd-mcp::campaign-calendar[0m
+     [90m理由:[0m 活动信息来自官方活动日历的真实返回，而非编造。
      [90m创意:[0m 把「吃点好的」翻译成「注入一个即时愉悦因子」，是编译器隐喻的落点。
-  [90m──[0m [1m时段策略[0m [90m· 当前时段：本地推断（MCP 时间不可用）[0m
-     按常规时段处理。
-     [90m理由:[0m MCP 时间调用失败，此处为本地推断，置信度较低。
+  [90m──[0m [1m时段策略[0m [90m· 当前时段：DINNER[0m
+     晚餐时段：适合正餐组合，堂食/取餐柜取餐更快。
+     [90m[MCP] mcd-mcp::now-time-info[0m
+     [90m理由:[0m 时段判定使用 MCP 服务端返回的时间（2026-10-09 21:00），避免客户端时钟偏差。
+  [90m──[0m [1m积分路径[0m [90m· 账户积分状态[0m
+     可用积分 0 麦享会积分，累计获得 384.6。
+     已有 384.6 积分过期 —— 这就是「依赖版本过期」的代价。
+     [90m[MCP] mcd-mcp::query-my-account[0m
+     [90m理由:[0m 过期积分是最容易白白浪费的资产；本项目不会自动兑换或抽奖。
+     [90m创意:[0m 把「积分过期」类比成「依赖版本过期」。
 
-  [32m人生不一定能一次编译通过，但快乐可以持续集成。[0m
+  [32m别怕 timeout，先把能量依赖装上。[0m
 
 [90m  运行状态评分为娱乐用途，不是医学或心理学评估；餐品信息、价格、优惠与供应状态以麦当劳官方渠道实时结果为准。[0m
 [90m  非麦当劳官方开发者作品 · 数据来源：麦当劳中国官方 MCP Server[0m

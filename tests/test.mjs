@@ -8,7 +8,7 @@ import { parseLifeState, describeState } from '../skills/mclife-compiler/scripts
 import { detectBugs, scoreRuntime, compileLife, generateLogs } from '../skills/mclife-compiler/scripts/compile-engine.mjs';
 import { renderTerminal, renderMarkdown, renderShareCard } from '../skills/mclife-compiler/scripts/report.mjs';
 import { pickNutritionPlan, applicableCoupons } from '../skills/mclife-compiler/scripts/mcd-resolver.mjs';
-import { normalizeToolResult } from '../skills/mclife-compiler/scripts/mcd-client.mjs';
+import { normalizeToolResult, parseMcdPayload, parseMcdTable } from '../skills/mclife-compiler/scripts/mcd-client.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -80,7 +80,20 @@ t('解析偏好：辣', () => {
 
 t('解析偏好：清淡覆盖 SPICY 抵扣', () => {
   const s = parseLifeState('想吃辣但也要清淡');
-  ok(s.prefs.includes('SPICY') && s.prefs.includes('NO_SPICY'));
+  ok(!s.prefs.includes('SPICY'), '否定式优先时不应保留 SPICY');
+  ok(s.prefs.includes('NO_SPICY'));
+});
+
+t('「不辣」不应同时命中 SPICY（回归：曾自相矛盾）', () => {
+  const s = parseLifeState('不辣');
+  eq(s.prefs.includes('SPICY'), false);
+  eq(s.prefs.includes('NO_SPICY'), true);
+});
+
+t('「想吃辣」应命中 SPICY 且不含 NO_SPICY', () => {
+  const s = parseLifeState('想吃辣');
+  eq(s.prefs.includes('SPICY'), true);
+  eq(s.prefs.includes('NO_SPICY'), false);
 });
 
 t('情景：debug 场景', () => {
@@ -180,6 +193,127 @@ t('日志反映 MCP 失败', () => {
 
 console.log('\n── mcd-resolver ──');
 
+/* 真实 MCP 返回样本（2026-10-09 实测截取，字段做最小化但保留结构） */
+const REAL_TABLE_JSON = JSON.stringify({
+  success: true,
+  code: 200,
+  message: '请求成功',
+  data: '[3]{productName,nutritionDescription,energyKcal,protein,fat,carbohydrate,sodium}:\n  麦辣鸡腿汉堡,null,485,24,20,45,1100\n  大薯条,null,379,6,16,50,216\n  鸡肉蛋沙拉叠叠卷,null,387,17,11,38,560',
+});
+
+const REAL_NUTRITION_MD =
+  '# API Response Information\n\n## Response Structure\n\n- **data**: 餐品热量列表\n\n## Original Response\n\n' +
+  REAL_TABLE_JSON;
+
+const REAL_ACCOUNT_JSON = JSON.stringify({
+  success: true,
+  code: 200,
+  data: { availablePoint: '0', accumulativePoint: '384.6', expiredPoint: '384.6', currency: '麦享会积分' },
+});
+
+t('解析真实营养表：自定义表格格式', () => {
+  const p = parseMcdPayload(REAL_NUTRITION_MD);
+  eq(p.format, 'table-json');
+  eq(p.table.count, 3);
+  eq(p.table.fields.length, 7);
+  eq(p.table.rows.length, 3);
+  eq(p.table.rows[0].productName, '麦辣鸡腿汉堡');
+  eq(p.table.rows[0].energyKcal, '485');
+  eq(p.table.rows[0].nutritionDescription, null);
+});
+
+t('解析真实积分返回：字段名为 availablePoint', () => {
+  const p = parseMcdPayload('## Original Response\n\n' + REAL_ACCOUNT_JSON);
+  eq(p.format, 'json');
+  eq(p.json.data.availablePoint, '0');
+  eq(p.json.data.accumulativePoint, '384.6');
+});
+
+t('解析 JSON 时正确跳过字符串内的括号', () => {
+  const tricky = '{"success":true,"data":{"note":"含 } 和 { 的文本","v":1}}';
+  const p = parseMcdPayload(tricky);
+  eq(p.format, 'json');
+  eq(p.json.data.v, 1);
+  eq(p.json.data.note, '含 } 和 { 的文本');
+});
+
+t('解析业务错误码', () => {
+  const p = parseMcdPayload('{"success":false,"code":500,"message":"服务异常"}');
+  eq(p.format, 'json-error');
+  eq(p.json.code, 500);
+});
+
+t('表格解析跳过列数不匹配的噪声行', () => {
+  const raw = '[2]{a,b}:\n  1,2\n  这行是说明文字\n  3,4';
+  const t2 = parseMcdTable(raw);
+  eq(t2.rows.length, 2);
+  eq(t2.rows[1].a, '3');
+});
+
+t('Markdown 返回（活动/券）被正确识别', () => {
+  const md = '### 活动列表：\n#### 2026年10月7日 往期回顾\n-   **活动标题**：测试活动\n    **活动内容介绍**：内容\n';
+  const p = parseMcdPayload(md);
+  eq(p.format, 'markdown');
+  ok(p.markdown.includes('测试活动'));
+});
+
+t('推荐组合总能量不超过目标 125%', () => {
+  const p = parseMcdPayload(REAL_NUTRITION_MD);
+  const rows = p.table.rows.map((r) => ({
+    name: r.productName,
+    energy: Number(r.energyKcal),
+    protein: Number(r.protein),
+    fat: Number(r.fat),
+    carb: Number(r.carbohydrate),
+    sodium: Number(r.sodium),
+  }));
+  const plan = pickNutritionPlan(rows, parseLifeState('累死了,饿死了'), 3);
+  ok(plan.totalEnergy <= plan.hardCap, `实际 ${plan.totalEnergy} > 上限 ${plan.hardCap}`);
+});
+
+t('推荐组合不会能量超标（真实样本）', () => {
+  const p = parseMcdPayload(REAL_NUTRITION_MD);
+  const rows = p.table.rows.map((r) => ({
+    name: r.productName,
+    energy: Number(r.energyKcal),
+    protein: Number(r.protein),
+    fat: Number(r.fat),
+    carb: Number(r.carbohydrate),
+    sodium: Number(r.sodium),
+  }));
+  // 低目标能量时应只选小份
+  const plan = pickNutritionPlan(rows, parseLifeState('不太饿'), 3);
+  ok(plan.totalEnergy <= plan.targetEnergy * 1.25 + 1, `实际 ${plan.totalEnergy}`);
+});
+
+t('SPICY 偏好必须压过能量密度（回归：偏好曾被能量分压制）', () => {
+  const rows = [
+    { name: '培根安格斯厚牛堡', energy: 707, protein: 34, fat: 40, carb: 50, sodium: 1200 },
+    { name: '麦辣鸡腿汉堡', energy: 485, protein: 24, fat: 20, carb: 45, sodium: 1100 },
+  ];
+  const plan = pickNutritionPlan(rows, parseLifeState('想吃辣'), 1);
+  eq(plan.items[0].name, '麦辣鸡腿汉堡');
+  eq(plan.items[0].prefMatch, 'SPICY');
+});
+
+t('VEG 偏好必须命中沙拉类（回归）', () => {
+  const rows = [
+    { name: '培根安格斯厚牛堡', energy: 707, protein: 34, fat: 40, carb: 50, sodium: 1200 },
+    { name: '鸡肉蛋沙拉叠叠卷', energy: 387, protein: 17, fat: 11, carb: 38, sodium: 560 },
+  ];
+  const plan = pickNutritionPlan(rows, parseLifeState('想吃沙拉'), 1);
+  eq(plan.items[0].name, '鸡肉蛋沙拉叠叠卷');
+});
+
+t('NO_SPICY 偏好排除辣味（负向权重生效）', () => {
+  const rows = [
+    { name: '麦辣鸡腿汉堡', energy: 485, protein: 24, fat: 20, carb: 45, sodium: 1100 },
+    { name: '原味板烧鸡腿堡', energy: 520, protein: 26, fat: 24, carb: 46, sodium: 1150 },
+  ];
+  const plan = pickNutritionPlan(rows, parseLifeState('不辣'), 1);
+  eq(plan.items[0].name, '原味板烧鸡腿堡');
+});
+
 t('营养推荐只用真实传入条目，不新增', () => {
   const list = [
     { name: '巨无霸汉堡', energy: 550, protein: 25, fat: 30, carb: 45, sodium: 800 },
@@ -220,15 +354,18 @@ t('预算未知时不筛券（无法判断，返回空更安全）', () => {
   eq(applicableCoupons([{ name: 'A', threshold: 20 }], null).length, 0);
 });
 
-t('normalizeToolResult 解包文本并尝试 JSON', () => {
+t('normalizeToolResult 归一化为 {format,json,table,markdown}', () => {
   const r = normalizeToolResult({ content: [{ type: 'text', text: '{"a":1}' }] });
-  eq(r.data, { a: 1 });
   eq(r.isError, false);
+  eq(r.data.format, 'json');
+  eq(r.data.json, { a: 1 });
 });
 
-t('normalizeToolResult 非 JSON 保留原文', () => {
+t('normalizeToolResult 非 JSON 走 markdown 分支并保留原文', () => {
   const r = normalizeToolResult({ content: [{ type: 'text', text: 'plain text' }] });
-  eq(r.data, 'plain text');
+  eq(r.data.format, 'markdown');
+  eq(r.data.markdown, 'plain text');
+  eq(r.data.json, null);
 });
 
 console.log('\n── report ──');

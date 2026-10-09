@@ -46,7 +46,7 @@
 | 项 | 说明 |
 |----|------|
 | 入参 | 无 |
-| 使用返回字段 | 能量、蛋白质、脂肪、碳水化合物、钠 |
+| 使用返回字段 | `energyKcal`（kcal，非 `energyKj` 千焦）、`protein`、`fat`、`carbohydrate`、`sodium`、`calcium` |
 | 调用时机 | 时段判定之后 |
 | 频次 | 每次编译 1 次 |
 
@@ -117,7 +117,7 @@
 
 | 项 | 说明 |
 |----|------|
-| 使用返回字段 | 可用积分、累计积分、即将过期积分 |
+| 使用返回字段 | `availablePoint`（可用）、`accumulativePoint`（累计）、`expiredPoint`（已过期）、`nextMouthExpirePoint`（即将过期） |
 | 业务价值 | 识别即将过期积分 |
 
 **业务价值**：过期积分是最容易被白白浪费的资产。检测到即将过期积分时，
@@ -269,3 +269,108 @@ node skills/mclife-compiler/scripts/mclife.mjs --tools
 
 本项目为**非麦当劳官方开发者作品**，与麦当劳及其关联公司无任何官方合作关系。
 麦当劳及 McDonald's 商标归其权利人所有。
+
+## 八、官方返回格式实测记录（2026-10-09 真实调用验证）
+
+⚠️ **这一节是本项目最重要的技术发现。官方文档没有说明返回格式，
+代码不能照文档猜字段，必须真实调用验证。**
+
+实测：官方 MCP Server **v1.0.0** 提供 **35 个工具**（官方 README 写 34 个，
+可能已更新）。本项目调用的 6 个工具返回了**三种完全不同的格式**：
+
+### 格式 A — 标准 JSON
+
+`now-time-info`、`query-my-account`
+
+```
+## Original Response
+{"success":true,"code":200,"message":"请求成功","datetime":"2026-10-09 21:38:35",
+ "traceId":"...","data":{"availablePoint":"0","accountId":"...","accumulativePoint":"384.6",
+ "currency":"麦享会积分","currentMouthExpirePoint":"0","expiredPoint":"384.6",...}}
+```
+
+注意：积分字段是 **`availablePoint`**，不是文档常见的 `points` / `availablePoints`。
+能量单位在营养表里是 **`energyKcal`**，同时还有 **`energyKj`**（千焦）——
+用错单位会让推荐结果差 4 倍。
+
+### 格式 B — 自定义序列化表格
+
+`list-nutrition-foods`
+
+```
+## Response Structure
+
+- **code**: 错误码 (Type: number)
+- **data**: 餐品热量列表(Type: string)
+...
+
+## Original Response
+
+{"success":true,"code":200,"data":"[160]{productName,nutritionDescription,energyKj,
+energyKcal,protein,fat,carbohydrate,sodium,calcium}:\n  猪柳麦满分,null,1288,308,
+16,16,24,781,213\n  猪柳蛋麦满分,null,1618,387,23,21,25,846,243\n ..."}
+```
+
+格式为 `[总数]{字段1,字段2,...}:` 后跟每行一条记录，逗号分隔，`null` 表示空值。
+**这不是标准 JSON**，`JSON.parse()` 会失败。实测共 160 条记录。
+
+本项目实现了 `parseMcdTable()` 解析该格式（见 `mcd-client.mjs`）。
+
+### 格式 C — Markdown 文本
+
+`campaign-calendar`、`available-coupons`、`query-my-coupons`
+
+```
+### 当前时间：2026-10-09 21:38:34
+
+### 活动列表：
+
+#### 2026年10月7日 往期回顾
+
+-   **活动标题**：超值𝟗.𝟗元早餐两件套陪你开工啦😋
+    **活动内容介绍**：早八的快乐，一堡一咖已就位🍔☕
+    **活动图片介绍**：
+    <img src="..." height="300" width="auto">
+```
+
+券则是：
+
+```
+### 麦麦省优惠券列表：
+- 优惠券标题：麦旋风任选 \
+  状态：可领取 \
+  优惠券图片：\
+    <img src="..." height="auto" width="300">
+```
+
+注意：
+- `query-my-coupons` 无券时返回纯文本 `暂无可用优惠券`
+- `available-coupons` **不返回面额与使用门槛**，所以本项目无法按门槛过滤可领券，
+  只能如实展示券名与状态（不臆造金额）
+
+### 本项目的应对
+
+`mcd-client.mjs` 的 `parseMcdPayload()` 把三种格式统一归一化为：
+
+```js
+{ format, json, table, markdown }
+// format: 'json' | 'table-json' | 'table-raw' | 'markdown' | 'json-error' | 'empty'
+```
+
+业务语义解析交给 `mcd-resolver.mjs`，职责分离。新增工具时只需在 resolver
+里针对对应 format 写解析，不用改客户端。
+
+### 真实调用发现并修复的 4 个 bug
+
+这些只有真实 Token 才能暴露，单元测试全部通过也照样存在：
+
+| # | 问题 | 根因 | 修复 |
+|---|------|------|------|
+| 1 | 营养数据解析出 0 条 | 返回是自定义表格格式，`JSON.parse` 失败后被当成字符串丢弃 | 实现 `parseMcdTable()` |
+| 2 | 推荐 2697 kcal（目标仅 860） | 按能量密度排序 Top-3，必然选出所有高热量大份餐 | 改为「先选主料，再按总能量缺口贪心拼组合」，总量封顶目标 125% |
+| 3 | 偏好完全失效 | 偏好权重设计为 +0.18 小加成，被 0~1 的能量分完全压制 | 引入 `prefMatch` 标记，偏好命中项作为排序硬优先级 |
+| 4 | 说「不辣」却推辣味 | 「不辣」同时命中 SPICY(+0.9) 与 NO_SPICY(-1.2)，正向加成赢了 | 解析层做互斥消歧（否定式优先），排序层 `excluded` 置于最高优先级 |
+
+修复后新增 13 项回归测试，测试总数从 46 增至 **59 项**，全部通过。
+
+以上所有数据均来自只读工具调用，项目未执行任何下单、领券、抽奖等写操作。

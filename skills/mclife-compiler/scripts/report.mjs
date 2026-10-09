@@ -12,6 +12,16 @@
 import { describeState } from './life-parse.mjs';
 import { generateLogs } from './compile-engine.mjs';
 
+/**
+ * mcpSource 兼容两种形态：字符串（单来源）与字符串数组（多来源）。
+ * 归一化为数组，避免渲染层到处做类型判断。
+ */
+function mcpSourceList(block) {
+  const s = block?.mcpSource;
+  if (!s) return [];
+  return Array.isArray(s) ? s.filter(Boolean) : [s];
+}
+
 const C = {
   reset: '[0m',
   dim: '[2m',
@@ -72,7 +82,8 @@ export function renderTerminal({ state, bugs, runtime, summary, logs, plan, trac
     for (const block of plan) {
       L.push(`  ${C.gray}──${C.reset} ${C.bold}${block.slot}${C.reset} ${C.gray}· ${block.title}${C.reset}`);
       for (const line of block.lines) L.push(`     ${line}`);
-      if (block.mcpSource?.length) L.push(`     ${C.gray}[MCP] ${block.mcpSource.join(', ')}${C.reset}`);
+      const src = mcpSourceList(block);
+      if (src.length) L.push(`     ${C.gray}[MCP] ${src.join(', ')}${C.reset}`);
       if (block.why) L.push(`     ${C.gray}理由:${C.reset} ${block.why}`);
       if (block.creative && block.creative !== '无') L.push(`     ${C.gray}创意:${C.reset} ${block.creative}`);
     }
@@ -159,8 +170,9 @@ export function renderMarkdown({ state, bugs, runtime, summary, logs, plan, trac
     M.push('');
     for (const line of block.lines) M.push(`- ${line}`);
     M.push('');
-    if (block.mcpSource?.length) {
-      M.push(`> \`[MCP]\` 本节数据来自：${block.mcpSource.join('、')}`);
+    const src = mcpSourceList(block);
+    if (src.length) {
+      M.push(`> \`[MCP]\` 本节数据来自：${src.join('、')}`);
     }
     if (block.why) M.push(`> **理由**：${block.why}`);
     if (block.creative && block.creative !== '无') M.push(`> \`[AI]\` ${block.creative}`);
@@ -229,7 +241,7 @@ export function renderShareCard({ state, bugs, runtime, summary, plan, disclaime
       <section class="block">
         <h3>${escapeHtml(b.slot)}<small>${escapeHtml(b.title)}</small></h3>
         <ul>${(b.lines || []).map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
-        ${b.mcpSource?.length ? `<p class="src">[MCP] ${b.mcpSource.map(escapeHtml).join(', ')}</p>` : ''}
+        ${mcpSourceList(b).length ? `<p class="src">[MCP] ${mcpSourceList(b).map(escapeHtml).join(', ')}</p>` : ''}
       </section>`,
     )
     .join('');

@@ -48,10 +48,15 @@ const HUNGER_LEXICON = [
   { value: 8, words: ['想吃', '馋', '嘴馋'] },
 ];
 
-/** 饮食偏好 */
+/** 饮食偏好
+ *
+ * 注意 PREF_LEXICON 的匹配顺序：SPICY 用裸 '辣'，NO_SPICY 用 '不辣'/'不要辣' 等否定式。
+ * 「不辣」会同时命中两者，所以后面 parsePrefs() 会做互斥消歧：
+ * 出现否定式时移除 SPICY，避免「不辣」被当成「想吃辣」。
+ */
 const PREF_LEXICON = [
   { key: 'SPICY', words: ['辣', '香辣', '麻辣', '变态辣'] },
-  { key: 'NO_SPICY', words: ['不辣', '不要辣', '清淡'] },
+  { key: 'NO_SPICY', words: ['不辣', '不要辣', '不吃辣', '清淡', '免辣'] },
   { key: 'VEG', words: ['素', '蔬菜', '沙拉', '清淡', '低卡'] },
   { key: 'CHICKEN', words: ['鸡', '鸡肉', '鸡腿', '炸鸡'] },
   { key: 'BEEF', words: ['牛肉', '牛排', '汉堡肉'] },
@@ -104,8 +109,22 @@ function parseBudget(text) {
   return null;
 }
 
-function countHits(text, words) {
-  const found = [];
+/**
+ * 偏好互斥消歧。
+ *
+ * 真实运行发现的问题：「不辣」「不想吃辣」会同时命中 SPICY（裸 '辣'）
+ * 与 NO_SPICY（'不辣'），导致既想吃辣又不想吃辣，
+ * 推荐的「辣度调整」方向自相矛盾。
+ *
+ * 规则：否定式优先。命中 NO_SPICY 时移除 SPICY。
+ */
+function resolvePrefConflicts(keys) {
+  const set = new Set(keys);
+  if (set.has('NO_SPICY')) set.delete('SPICY');
+  return [...set];
+}
+
+function countHits(text, words) {  const found = [];
   for (const w of words) {
     const lower = w.toLowerCase();
     const idx = text.toLowerCase().indexOf(lower);
@@ -184,7 +203,7 @@ export function parseLifeState(input = '', overrides = {}) {
 
   // 偏好
   const prefs = pickDominant(text, PREF_LEXICON);
-  state.prefs = prefs.map((p) => p.key);
+  state.prefs = resolvePrefConflicts(prefs.map((p) => p.key));
   if (prefs.length > 0) {
     evidence.push({ field: 'prefs', value: state.prefs, from: prefs.flatMap((p) => p.hits.map((h) => h.word)) });
   }
