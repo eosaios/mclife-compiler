@@ -127,8 +127,10 @@ node scripts/mclife.mjs "累死了" --format card --out card.html
 # 结构化 JSON
 node scripts/mclife.mjs "累死了" --format json
 
-# 追问补齐参数
+# 追问补齐参数（--pref 大小写/中文别名均可）
 node scripts/mclife.mjs "想吃辣" --budget 35 --pref spicy,light
+node scripts/mclife.mjs "想吃辣" --budget 35 --pref 辣,清淡
+node scripts/mclife.mjs "想吃沙拉" --budget 40 --pref salad
 
 # MCP 探活 / 查看官方真实工具清单
 node scripts/mclife.mjs --check
@@ -295,7 +297,7 @@ mclife-compiler/
 node tests/test.mjs
 
 # 输出示例
-✓ 通过 59  失败 0
+✓ 通过 69  失败 0
 ```
 
 测试覆盖：预算解析（阿拉伯/中文数字/缺失）、疲劳阈值、情绪联动推断、
@@ -303,8 +305,18 @@ Bug 检出与排序、**官方三种返回格式解析**、**偏好优先级（�
 **能量缺口控制（不超目标 125%）**、券门槛过滤、报告渲染、XSS 转义、
 空输入与超长输入边界。
 
-其中 13 项是从**真实 MCP 返回样本**中提取的回归测试 —— 包括官方自定义表格格式
-`[160]{productName,energyKcal,...}`、Markdown 活动/券格式、`availablePoint` 积分字段。
+其中 22 项是从**真实 MCP 返回样本**与**真实使用场景**中提取的回归测试 ——
+包括官方自定义表格格式 `[160]{productName,energyKcal,...}`、Markdown 活动/券格式、
+`availablePoint` 积分字段、以及 `--pref` 参数归一化（曾因大小写不匹配静默失效）。
+
+`--pref` 支持的写法（均已测试）：
+
+| 写法 | 示例 |
+|------|------|
+| 大写 key | `SPICY` `VEG` `CHICKEN` |
+| 小写 | `spicy` `salad` `chicken` |
+| 中文 | `辣` `清淡` `沙拉` `鸡` `薯条` `夜宵` |
+| 组合 | `spicy,light` |
 
 **技术栈**：Node.js 标准库，零运行时依赖。MCP 客户端为手写实现
 （Streamable HTTP + SSE 解析 + Session 管理 + 三种返回格式归一化），

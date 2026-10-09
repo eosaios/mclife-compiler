@@ -52,8 +52,9 @@ node scripts/mclife.mjs "<用户原话>" --format json
 ### 追问补齐参数
 
 ```bash
-# 用户被追问后明确给了预算和偏好
+# 用户被追问后明确给了预算和偏好（--pref 大小写/中文别名均可）
 node scripts/mclife.mjs "<用户原话>" --budget 35 --pref spicy,light
+node scripts/mclife.mjs "<用户原话>" --budget 40 --pref salad,清淡
 
 # MCP 探活（首次使用或排错时先跑这个）
 node scripts/mclife.mjs --check

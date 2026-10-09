@@ -109,6 +109,55 @@ function parseBudget(text) {
   return null;
 }
 
+/** 合法偏好 key（与 PREF_LEXICON 的 key 一致，用于 CLI --pref 参数校验与归一化） */
+export const VALID_PREFS = Object.freeze([
+  'SPICY', 'NO_SPICY', 'VEG', 'LIGHT', 'CHICKEN', 'BEEF',
+  'FRIES', 'BREAKFAST', 'LATE_NIGHT', 'SHAREABLE',
+]);
+
+/**
+ * 归一化用户/CLI 传入的偏好。
+ *
+ * 真实使用发现的问题：`mclife.mjs --pref spicy`（小写）把 'spicy' 原样塞进
+ * state.prefs，而解析器内部一律用大写 key（'SPICY'）做 includes 判断，
+ * 导致偏好静默失效 —— 用户明确要求辣，主料却是不辣的安格斯厚牛堡。
+ *
+ * 这里做「大小写不敏感 + 别名映射 + 非法值过滤」，并对未知值给出提示。
+ */
+export function normalizePrefs(input = []) {
+  const raw = Array.isArray(input) ? input : String(input).split(',');
+  const alias = {
+    spicy: 'SPICY', hot: 'SPICY', 辣: 'SPICY', 香辣: 'SPICY',
+    nospicy: 'NO_SPICY', mild: 'NO_SPICY', 不辣: 'NO_SPICY', 清淡: 'NO_SPICY',
+    veg: 'VEG', salad: 'VEG', vegetable: 'VEG', 素: 'VEG', 沙拉: 'VEG', 蔬菜: 'VEG',
+    light: 'LIGHT', lowcal: 'LIGHT', 轻食: 'LIGHT', 低卡: 'LIGHT', 减脂: 'LIGHT',
+    chicken: 'CHICKEN', 鸡: 'CHICKEN', 鸡肉: 'CHICKEN',
+    beef: 'BEEF', 牛: 'BEEF', 牛肉: 'BEEF',
+    fries: 'FRIES', 薯条: 'FRIES', 薯: 'FRIES',
+    breakfast: 'BREAKFAST', 早餐: 'BREAKFAST', 早饭: 'BREAKFAST',
+    latenight: 'LATE_NIGHT', night: 'LATE_NIGHT', 夜宵: 'LATE_NIGHT', 宵夜: 'LATE_NIGHT',
+    shareable: 'SHAREABLE', group: 'SHAREABLE', 分享: 'SHAREABLE', 拼单: 'SHAREABLE',
+  };
+
+  const out = [];
+  const unknown = [];
+  for (const item of raw) {
+    const s = String(item).trim();
+    if (!s) continue;
+    const upper = s.toUpperCase().replace(/[\s-]/g, '_');
+    let key = null;
+    if (VALID_PREFS.includes(upper)) key = upper;
+    else if (alias[s.toLowerCase()]) key = alias[s.toLowerCase()];
+    else if (alias[s]) key = alias[s];
+    if (key) {
+      if (!out.includes(key)) out.push(key);
+    } else {
+      unknown.push(s);
+    }
+  }
+  return { prefs: resolvePrefConflicts(out), unknown };
+}
+
 /**
  * 偏好互斥消歧。
  *
@@ -234,8 +283,17 @@ export function parseLifeState(input = '', overrides = {}) {
     evidence.push({ field: 'budget', value: overrides.budget, from: ['user_confirmed'] });
   }
   if (Array.isArray(overrides.prefs) && overrides.prefs.length > 0) {
-    state.prefs = [...new Set([...state.prefs, ...overrides.prefs])];
-    evidence.push({ field: 'prefs', value: overrides.prefs, from: ['user_confirmed'] });
+    // 归一化：支持小写/中文别名，避免 CLI --pref spicy 这类输入静默失效
+    const { prefs: normalized, unknown } = normalizePrefs(overrides.prefs);
+    state.prefs = resolvePrefConflicts([...state.prefs, ...normalized]);
+    evidence.push({
+      field: 'prefs',
+      value: normalized,
+      from: ['user_confirmed'],
+    });
+    if (unknown.length > 0) {
+      state.unknownPrefs = unknown;
+    }
   }
   if (typeof overrides.fatigue === 'number') state.fatigue = overrides.fatigue;
   if (typeof overrides.hunger === 'number') state.hunger = overrides.hunger;

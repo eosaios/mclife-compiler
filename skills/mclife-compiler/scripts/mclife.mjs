@@ -18,7 +18,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { McdMcpClient, safeCall, hasToken, TOOLS_USED } from './mcd-client.mjs';
-import { parseLifeState, describeState } from './life-parse.mjs';
+import { parseLifeState, describeState, normalizePrefs, VALID_PREFS } from './life-parse.mjs';
 import { compileLife, scoreRuntime, generateLogs } from './compile-engine.mjs';
 import { resolveMcDependencies, buildPlan } from './mcd-resolver.mjs';
 import { renderTerminal, renderMarkdown, renderShareCard } from './report.mjs';
@@ -34,8 +34,7 @@ function parseArgs(argv) {
     if (a === '--format' || a === '-f') args.format = argv[++i];
     else if (a === '--out' || a === '-o') args.out = argv[++i];
     else if (a === '--budget' || a === '-b') args.budget = Number(argv[++i]);
-    else if (a === '--pref' || a === '-p') args.prefs = String(argv[++i]).split(',').map((s) => s.trim()).filter(Boolean);
-    else if (a === '--check') args.check = true;
+    else if (a === '--pref' || a === '-p') args.prefs = String(argv[++i]).split(',').map((s) => s.trim()).filter(Boolean);    else if (a === '--check') args.check = true;
     else if (a === '--tools') args.tools = true;
     else if (a.startsWith('-')) {
       console.error(`未知参数: ${a}`);
@@ -100,7 +99,16 @@ async function main() {
   // 1) 解析
   const overrides = {};
   if (Number.isFinite(args.budget)) overrides.budget = args.budget;
-  if (args.prefs.length > 0) overrides.prefs = args.prefs;
+  if (args.prefs.length > 0) {
+    overrides.prefs = args.prefs;
+    // 提前校验，让用户立刻看到无效值，而不是被静默忽略
+    const { unknown } = normalizePrefs(args.prefs);
+    if (unknown.length > 0) {
+      console.error(`⚠ 无法识别的偏好值: ${unknown.join(', ')}`);
+      console.error(`  可用值: ${VALID_PREFS.join(', ')}`);
+      console.error(`  也支持中文/小写别名，如「辣」「清淡」「沙拉」`);
+    }
+  }
   let state = parseLifeState(args.input, overrides);
 
   // 2) MCP 依赖解析

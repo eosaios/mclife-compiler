@@ -4,7 +4,7 @@
  * 运行: node tests/test.mjs
  */
 
-import { parseLifeState, describeState } from '../skills/mclife-compiler/scripts/life-parse.mjs';
+import { parseLifeState, describeState, normalizePrefs, VALID_PREFS } from '../skills/mclife-compiler/scripts/life-parse.mjs';
 import { detectBugs, scoreRuntime, compileLife, generateLogs } from '../skills/mclife-compiler/scripts/compile-engine.mjs';
 import { renderTerminal, renderMarkdown, renderShareCard } from '../skills/mclife-compiler/scripts/report.mjs';
 import { pickNutritionPlan, applicableCoupons } from '../skills/mclife-compiler/scripts/mcd-resolver.mjs';
@@ -438,6 +438,58 @@ t('三种格式对同一输入都能产出', () => {
   ok(renderTerminal(p).length > 100);
   ok(renderMarkdown(p).length > 100);
   ok(renderShareCard(p).length > 100);
+});
+
+console.log('\n── 偏好归一化（CLI --pref）──');
+
+t('normalizePrefs 小写归一化为大写（回归：--pref spicy 曾静默失效）', () => {
+  eq(normalizePrefs(['spicy']).prefs, ['SPICY']);
+});
+
+t('normalizePrefs 支持中文别名', () => {
+  eq(normalizePrefs(['辣']).prefs, ['SPICY']);
+  eq(normalizePrefs(['清淡']).prefs, ['NO_SPICY']);
+  eq(normalizePrefs(['沙拉']).prefs, ['VEG']);
+});
+
+t('normalizePrefs 支持英文别名', () => {
+  eq(normalizePrefs(['salad']).prefs, ['VEG']);
+  eq(normalizePrefs(['chicken']).prefs, ['CHICKEN']);
+  eq(normalizePrefs(['fries']).prefs, ['FRIES']);
+});
+
+t('normalizePrefs 非法值被过滤并报告', () => {
+  const r = normalizePrefs(['INVALID', 'spicy']);
+  eq(r.prefs, ['SPICY']);
+  eq(r.unknown, ['INVALID']);
+});
+
+t('normalizePrefs 去重', () => {
+  eq(normalizePrefs(['spicy', 'SPICY', '辣']).prefs, ['SPICY']);
+});
+
+t('normalizePrefs 不辣与辣同时出现时否定优先', () => {
+  eq(normalizePrefs(['spicy', 'nospicy']).prefs, ['NO_SPICY']);
+});
+
+t('VALID_PREFS 覆盖所有词典 key', () => {
+  eq(VALID_PREFS.includes('SHAREABLE'), true);
+  ok(VALID_PREFS.length >= 10);
+});
+
+t('--pref 小写经 CLI 路径也能生效（端到端解析层）', () => {
+  const s = parseLifeState('想吃点东西', { prefs: ['spicy'] });
+  ok(s.prefs.includes('SPICY'), `实际: ${JSON.stringify(s.prefs)}`);
+});
+
+t('--pref 中文经 CLI 路径也能生效', () => {
+  const s = parseLifeState('想吃点东西', { prefs: ['沙拉'] });
+  ok(s.prefs.includes('VEG'), `实际: ${JSON.stringify(s.prefs)}`);
+});
+
+t('无效偏好值被记入 unknownPrefs 供提示', () => {
+  const s = parseLifeState('想吃点东西', { prefs: ['INVALID'] });
+  eq(s.unknownPrefs, ['INVALID']);
 });
 
 console.log('\n── 边界与安全 ──');
