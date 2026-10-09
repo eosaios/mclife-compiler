@@ -1,0 +1,21 @@
+# 敏感信息 —— 绝不提交
+.env
+.env.*
+*.token
+mcp-config.json
+!mcp-config.example.json
+
+# 输出产物
+examples/sample-card.html
+dist/
+*.log
+
+# 依赖
+node_modules/
+
+# 系统
+.DS_Store
+.idea/
+.vscode/
+web/dist/
+web/tsconfig.tsbuildinfo

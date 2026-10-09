@@ -1,0 +1,70 @@
+
+[1m[36m  McLife Compiler[0m [90m// 麦麦人生编译器 v1.0.0[0m
+[90m  ─────────────────────────────────────────────[0m
+  [90m时间[0m   [33m未知[0m
+  [90m状态[0m   [1mBUILD FAILED — recoverable[0m
+  [90m评分[0m   21/100 [90m(娱乐用途)[0m
+  [90m解读[0m   电量见底 · 深夜加班 · 能量 2/10 · 饥饿 UNKNOWN
+  [90m预算[0m   ¥30
+
+[1m  编译日志[0m
+  21:00:08 [36m[INFO][0m  Loading Life Runtime...
+  21:00:08 [36m[INFO][0m  Runtime version: human/1.0.0 (kernel: OVERTIME_NIGHT)
+  21:00:08 [36m[INFO][0m  Detected mood=EXHAUSTED energy=2/10 hunger=UNKNOWN
+  21:00:08 [33m[WARN][0m  now-time-info unavailable, time slot inferred locally (降低置信度)
+  21:00:08 [36m[INFO][0m  Budget constraint: ¥30
+  21:00:08 [31m[ERROR][0m Energy buffer underflow detected  (life://energy-underflow)
+  21:00:08 [31m[ERROR][0m Sleep dependency is stale, cache miss on recovery  (life://sleep-dependency-stale)
+  21:00:08 [31m[ERROR][0m Workload exceeded recommended threshold  (life://overtime-overflow)
+  21:00:08 [33m[WARN][0m Hunger variable is undefined, using safe default  (life://hungry-value-undefined)
+  21:00:08 [33m[WARN][0m Happiness dependency missing, falling back to default joy  (life://happiness-not-found)
+  21:00:08 [36m[INFO][0m Budget constraint active, optimizing for cost  (life://budget-constraint-active)
+  21:00:08 [36m[INFO][0m  Resolving McDonald's resources via mcd-mcp...
+  21:00:08 [31m[FAIL][0m mcp.(skipped) -> 未配置 MCD_MCP_TOKEN，本次为离线编译                                   
+  21:00:08 [36m[INFO][0m  Linking happiness dependency...
+  21:00:08 [32m[SUCCESS][0m Recovery plan generated
+  
+  [33m[1mBUILD FAILED — recoverable[0m
+  [90mruntime score: 21/100 (娱乐用途)  |  电量见底 · 深夜加班[0m
+
+[1m  今日 Bug 清单 (6)[0m
+  [31m✖  1. ENERGY_UNDERFLOW[0m  [90m精力不足[0m
+      [90mEnergy buffer underflow detected[0m
+      [32mfix:[0m 补充高能量密度补给，避免空转
+  [31m✖  2. SLEEP_DEPENDENCY_STALE[0m  [90m睡眠依赖过期[0m
+      [90mSleep dependency is stale, cache miss on recovery[0m
+      [32mfix:[0m 优先补睡眠，短期靠食物托底
+  [31m✖  3. OVERTIME_OVERFLOW[0m  [90m加班溢出[0m
+      [90mWorkload exceeded recommended threshold[0m
+      [32mfix:[0m 停止接单，先补能量再继续 build
+  [33m⚠  4. HUNGRY_VALUE_UNDEFINED[0m  [90m饥饿值未定义[0m
+      [90mHunger variable is undefined, using safe default[0m
+      [32mfix:[0m 按常规补给量处理
+  [33m⚠  5. HAPPINESS_NOT_FOUND[0m  [90m快乐依赖缺失[0m
+      [90mHappiness dependency missing, falling back to default joy[0m
+      [32mfix:[0m 注入一个即时愉悦因子（甜品/饮料）
+  [36mℹ  6. BUDGET_CONSTRAINT_ACTIVE[0m  [90m预算约束生效[0m
+      [90mBudget constraint active, optimizing for cost[0m
+      [32mfix:[0m 优先使用可用优惠后再下单
+
+[1m  麦麦补给方案[0m
+  [90m──[0m [1m主食组合[0m [90m· 营养数据不可用[0m
+     list-nutrition-foods 未返回可用数据，本次不做营养维度推荐。
+     [90m理由:[0m 不编造营养数据。
+  [90m──[0m [1m预算与优惠[0m [90m· 预算 ¥30[0m
+     未能获取账户优惠券信息（需有效 Token）。
+     未执行 calculate-price（需先确定门店与具体商品），价格请以官方 App/小程序为准。
+     [90m理由:[0m 本项目不编造实时价格。
+  [90m──[0m [1m快乐依赖[0m [90m· HAPPINESS_NOT_FOUND 修复方案[0m
+     活动日历不可用，无法给出真实活动推荐。
+     [90m理由:[0m 不编造活动。
+     [90m创意:[0m 把「吃点好的」翻译成「注入一个即时愉悦因子」，是编译器隐喻的落点。
+  [90m──[0m [1m时段策略[0m [90m· 当前时段：本地推断（MCP 时间不可用）[0m
+     按常规时段处理。
+     [90m理由:[0m MCP 时间调用失败，此处为本地推断，置信度较低。
+
+  [32m人生不一定能一次编译通过，但快乐可以持续集成。[0m
+
+[90m  运行状态评分为娱乐用途，不是医学或心理学评估；餐品信息、价格、优惠与供应状态以麦当劳官方渠道实时结果为准。[0m
+[90m  非麦当劳官方开发者作品 · 数据来源：麦当劳中国官方 MCP Server[0m
+

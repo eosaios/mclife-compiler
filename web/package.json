@@ -1,0 +1,21 @@
+{
+  "name": "mclife-compiler-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "McLife Compiler 可视化分享卡片（可选增强）。核心 Skill 不依赖本目录。",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7",
+    "vue-tsc": "^2.2.0"
+  }
+}

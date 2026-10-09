@@ -1,0 +1,14 @@
+{
+  "_comment": "McLife Compiler 脱敏配置示例。请把 ${MCD_MCP_TOKEN} 替换为你的真实 Token，或直接在 MCP Client 中配置为环境变量引用。切勿把真实 Token 提交到 Git 仓库。",
+  "_how_to_get_token": "前往 https://open.mcd.cn/mcp → 右上角登录（手机号验证）→ 控制台 → 激活 → 同意服务协议 → 复制 MCP Token",
+  "_token_env_var": "MCD_MCP_TOKEN",
+  "mcpServers": {
+    "mcd-mcp": {
+      "type": "streamablehttp",
+      "url": "https://mcp.mcd.cn",
+      "headers": {
+        "Authorization": "Bearer ${MCD_MCP_TOKEN}"
+      }
+    }
+  }
+}
