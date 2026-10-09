@@ -4,11 +4,13 @@
  * 运行: node tests/test.mjs
  */
 
-import { parseLifeState, describeState, normalizePrefs, VALID_PREFS } from '../skills/mclife-compiler/scripts/life-parse.mjs';
+import { parseLifeState, describeState, normalizePrefs, VALID_PREFS, VALID_EMOTIONS } from '../skills/mclife-compiler/scripts/life-parse.mjs';
 import { detectBugs, scoreRuntime, compileLife, generateLogs } from '../skills/mclife-compiler/scripts/compile-engine.mjs';
 import { renderTerminal, renderMarkdown, renderShareCard } from '../skills/mclife-compiler/scripts/report.mjs';
 import { pickNutritionPlan, applicableCoupons } from '../skills/mclife-compiler/scripts/mcd-resolver.mjs';
 import { normalizeToolResult, parseMcdPayload, parseMcdTable } from '../skills/mclife-compiler/scripts/mcd-client.mjs';
+import * as m from '../skills/mclife-compiler/scripts/mcd-client.mjs';
+import { McdMcpClient } from '../skills/mclife-compiler/scripts/mcd-client.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -573,6 +575,234 @@ t('「5毛」解析为 0.5 元', () => {
 t('预算 0 仍能正确区分于「未提供」', () => {
   eq(parseLifeState('预算只有 0 元').budget, 0);
   eq(parseLifeState('今天').budget, null);
+});
+
+console.log('\n── 否定式通用机制（审计发现：只做了饥饿一处，其余模块全反向）──');
+
+t('「不开心」不应判为 HAPPY（回归）', () => {
+  eq(parseLifeState('不开心').emotion === 'HAPPY', false);
+});
+
+t('「不高兴」「不顺利」同理', () => {
+  eq(parseLifeState('不高兴').emotion === 'HAPPY', false);
+  eq(parseLifeState('不顺利').emotion === 'HAPPY', false);
+});
+
+t('「不太累」不应判为 EXHAUSTED（回归）', () => {
+  const s = parseLifeState('不太累');
+  eq(s.emotion === 'EXHAUSTED', false);
+  ok(s.fatigue <= 5, `fatigue=${s.fatigue}`);
+});
+
+t('「不累」疲劳值应低', () => {
+  ok(parseLifeState('不累').fatigue <= 5);
+});
+
+t('「不加班」不应判为 OVERTIME_NIGHT（回归）', () => {
+  eq(parseLifeState('不加班').scenario, 'UNKNOWN');
+});
+
+t('「不开会」不应判为 MEETING（回归）', () => {
+  eq(parseLifeState('不开会').scenario, 'UNKNOWN');
+});
+
+t('「没有deadline」不应判为 DEADLINE（复合否定词「没有」）', () => {
+  eq(parseLifeState('没有deadline').scenario, 'UNKNOWN');
+});
+
+t('「不加辣」应判为 NO_SPICY（动补结构否定）', () => {
+  const p = parseLifeState('不加辣').prefs;
+  ok(p.includes('NO_SPICY') && !p.includes('SPICY'), `实际 ${JSON.stringify(p)}`);
+});
+
+t('「不要辣」应判为 NO_SPICY', () => {
+  ok(parseLifeState('不要辣').prefs.includes('NO_SPICY'));
+});
+
+t('「不是一个人」不应判为 LONELY', () => {
+  eq(parseLifeState('不是一个人').scenario, 'UNKNOWN');
+});
+
+t('「不熬夜」「不孤独」同理', () => {
+  eq(parseLifeState('不熬夜').scenario, 'UNKNOWN');
+  eq(parseLifeState('不孤独').scenario, 'UNKNOWN');
+});
+
+t('否定式不应误杀正向表达', () => {
+  eq(parseLifeState('想加班').scenario, 'OVERTIME_NIGHT');
+  eq(parseLifeState('今天开会').scenario, 'MEETING');
+  eq(parseLifeState('想吃辣').prefs.includes('SPICY'), true);
+  ok(parseLifeState('加班到凌晨').fatigue >= 8);
+});
+
+console.log('\n── 单字词条歧义防护 ──');
+
+t('「今天天气很好」不应判为 ANGRY（回归：裸单字「气」）', () => {
+  eq(parseLifeState('今天天气很好').emotion, 'NEUTRAL');
+});
+
+t('「想跑步」不应判为 BURNED_OUT（回归：「想跑」）', () => {
+  eq(parseLifeState('想跑步').emotion, 'NEUTRAL');
+});
+
+t('「维生素C」「元素周期表」不应产生 VEG 偏好（回归：裸单字「素」）', () => {
+  eq(parseLifeState('维生素C').prefs.includes('VEG'), false);
+  eq(parseLifeState('元素周期表').prefs.includes('VEG'), false);
+});
+
+t('「累计了一万块」不应判为 EXHAUSTED（回归：裸单字「累」）', () => {
+  const s = parseLifeState('累计了一万块');
+  eq(s.emotion === 'EXHAUSTED', false);
+  eq(s.budget, 10000);
+});
+
+t('「element」不应判为 ANGRY（回归：「nm」子串命中英文）', () => {
+  eq(parseLifeState('element').emotion, 'NEUTRAL');
+});
+
+t('「麻烦你了」不应判为 STRESSED（回归：裸单字「烦」）', () => {
+  eq(parseLifeState('麻烦你了').emotion, 'NEUTRAL');
+});
+
+t('「拼命干活」不应产生 SHAREABLE 偏好（回归：裸单字「拼」）', () => {
+  eq(parseLifeState('拼命干活').prefs.includes('SHAREABLE'), false);
+});
+
+console.log('\n── 多值字段与越界防护 ──');
+
+t('偏好不应被 limit=3 截断（回归：丢第 4 种口味）', () => {
+  const s = parseLifeState('想吃辣、牛排、鸡腿、薯条');
+  eq(s.prefs.length, 4);
+  ['SPICY', 'BEEF', 'CHICKEN', 'FRIES'].forEach((k) => {
+    ok(s.prefs.includes(k), `缺少 ${k}：${JSON.stringify(s.prefs)}`);
+  });
+});
+
+t('overrides.fatigue 越界应被钳制（回归：99 穿透）', () => {
+  const s = parseLifeState('开心', { fatigue: 99 });
+  ok(s.fatigue <= 10 && s.fatigue >= 0, `fatigue=${s.fatigue}`);
+});
+
+t('overrides.hunger 负值应被钳制', () => {
+  const s = parseLifeState('开心', { hunger: -5 });
+  ok(s.hunger >= 0, `hunger=${s.hunger}`);
+});
+
+t('overrides NaN 应被忽略', () => {
+  const s = parseLifeState('开心', { fatigue: NaN });
+  ok(Number.isFinite(s.fatigue), `fatigue=${s.fatigue}`);
+});
+
+t('overrides.emotion 非法值应被忽略', () => {
+  eq(parseLifeState('开心', { emotion: 'ZZZ' }).emotion, 'HAPPY');
+});
+
+t('overrides=null 不应崩溃（回归：MCP 反序列化常见）', () => {
+  let s;
+  try {
+    s = parseLifeState('累', null);
+  } catch (e) {
+    throw new Error('崩溃: ' + e.message);
+  }
+  ok(Number.isFinite(s.fatigue));
+});
+
+t('input=null / undefined 不应崩溃', () => {
+  ok(parseLifeState(null).budget === null);
+  ok(parseLifeState(undefined).budget === null);
+});
+
+t('normalizePrefs(null) 不应把 "null" 当未知值', () => {
+  eq(normalizePrefs(null).unknown, []);
+  eq(normalizePrefs(undefined).unknown, []);
+});
+
+t('VALID_EMOTIONS 已导出', () => {
+  ok(VALID_EMOTIONS.includes('EXHAUSTED') && VALID_EMOTIONS.includes('NEUTRAL'));
+});
+
+console.log('\n── 预算单位约束 ──');
+
+t('「今天只有3个人」不应当作预算（回归：缺单位约束）', () => {
+  eq(parseLifeState('今天只有3个人').budget, null);
+});
+
+t('「剩2小时」不应当作预算', () => {
+  eq(parseLifeState('剩2小时').budget, null);
+});
+
+t('「今天只有3个bug要修」不应当作预算', () => {
+  eq(parseLifeState('今天只有3个bug要修').budget, null);
+});
+
+t('带单位的「只有30元」仍应正确识别', () => {
+  eq(parseLifeState('只有 30 元').budget, 30);
+});
+
+t('「没吃早饭」应判为很饿（回归：曾误归为无食欲）', () => {
+  eq(parseLifeState('没吃早饭').hunger, 9);
+});
+
+console.log('\n── MCP 客户端健壮性（审计发现）──');
+
+t('表格解析：CSV 引号内含逗号', () => {
+  const r = parseMcdTable('[1]{name,kcal}:\n  "猪柳, 蛋麦满分",387');
+  eq(r.rows[0].name, '猪柳, 蛋麦满分');
+  eq(r.rows[0].kcal, '387');
+});
+
+t('表格解析：反斜杠续行应合并', () => {
+  const r = parseMcdTable('[1]{a,b}:\n  第一行\\\n  第二行,30元');
+  eq(r.rows[0].a, '第一行第二行');
+  eq(r.rows[0].b, '30元');
+});
+
+t('表格解析：列数不匹配需记录 skippedLines（不再静默丢弃）', () => {
+  const r = parseMcdTable('[3]{a,b}:\n  1,2,3\n  4,5');
+  ok(r.skippedLines.length > 0, '应记录被跳过的行');
+});
+
+t('表格解析：truncated 标记 count 与实际不符', () => {
+  const r = parseMcdTable('[5]{a,b}:\n  1,2');
+  eq(r.truncated, true);
+});
+
+t('客户端构造：opts=null 不崩溃', () => {
+  let c;
+  try {
+    c = new McdMcpClient(null);
+  } catch (e) {
+    throw new Error('崩溃: ' + e.message);
+  }
+  ok(c.endpoint.startsWith('http'));
+});
+
+t('客户端构造：token 为数字不崩溃', () => {
+  let c;
+  try {
+    c = new McdMcpClient({ token: 123 });
+  } catch (e) {
+    throw new Error('崩溃: ' + e.message);
+  }
+  eq(c.token, '123');
+});
+
+t('客户端构造：token 自动剥离 Bearer 前缀（避免双重 Bearer）', () => {
+  eq(new McdMcpClient({ token: 'Bearer abc123' }).token, 'abc123');
+});
+
+t('客户端构造：非法 timeoutMs 回退默认而非 NaN', () => {
+  const c = new McdMcpClient({ timeoutMs: 'abc' });
+  ok(Number.isFinite(c.timeoutMs) && c.timeoutMs > 1000, `timeoutMs=${c.timeoutMs}`);
+});
+
+t('resolveToken 支持多环境变量名', () => {
+  eq(m.resolveToken({ MCP_TOKEN: 'x1' }), 'x1');
+  eq(m.resolveToken({ MCD_TOKEN: 'x2' }), 'x2');
+});
+
+t('resolveToken(null) 不崩溃', () => {
+  eq(m.resolveToken(null), '');
 });
 
 console.log('\n── 边界与安全 ──');

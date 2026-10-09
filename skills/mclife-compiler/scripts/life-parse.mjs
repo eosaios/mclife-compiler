@@ -20,23 +20,43 @@ export const DEFAULT_STATE = Object.freeze({
   isWeekend: null,
 });
 
-/** 情绪词典 */
+/** 情绪词典
+ *
+ * ⚠️ 修复记录（真实测试发现）：
+ *   - 删除裸单字 '气'：会被「天气」「香气」「运气」命中 → 曾判「今天天气很好」为 ANGRY
+ *   - 删除裸单字 '累'：会被「累计」「劳累」命中；且否定式已由匹配层统一处理
+ *   - 修正 'emo' 重复：曾在 SAD 中字面写两次，导致计数翻倍压过 STRESSED
+ *   - 删除 'nm'：会命中英文单词（environment）
+ *   - 删除 '肝'：会命中「护肝」
+ *   - 删除 '想跑'：会命中「想跑步」
+ *   - 删除 '烦'：会命中「麻烦」（保留更具体的「烦躁」「烦心」）
+ */
 const EMOTION_LEXICON = [
-  { key: 'EXHAUSTED', words: ['累', '疲', '透支', '扛不住', '精疲力尽', '熬夜', '通宵', '肝'] },
-  { key: 'STRESSED', words: ['压力', '焦虑', '崩溃', '烦', '抑郁', 'emo', '难受', '窒息', '忙不过来', 'deadline', 'ddl'] },
-  { key: 'BURNED_OUT', words: ['不想干', '摆烂', '躺平', '没劲', '厌倦', '离职', '辞职', '想跑'] },
-  { key: 'HAPPY', words: ['开心', '高兴', '爽', '不错', '顺利', '搞定', '成功', 'happy', '兴奋'] },
-  { key: 'SAD', words: ['难过', '低落', 'emo', '孤独', 'emo', '失落', '哭'] },
-  { key: 'ANGRY', words: ['气', '愤怒', '离谱', '抓狂', 'nm', '服了'] },
+  { key: 'EXHAUSTED', words: ['累坏了', '疲惫', '透支', '扛不住', '精疲力尽', '熬夜', '通宵', '很累', '好累'] },
+  { key: 'STRESSED', words: ['压力', '焦虑', '崩溃', '烦躁', '烦心', '抑郁', '难受', '窒息', '忙不过来', 'deadline', 'ddl', '紧张', '慌'] },
+  { key: 'BURNED_OUT', words: ['不想干', '摆烂', '躺平', '没劲', '厌倦', '离职', '辞职', '想辞职'] },
+  { key: 'HAPPY', words: ['开心', '高兴', '爽', '不错', '顺利', '搞定', '成功', 'happy', '兴奋', '愉快'] },
+  { key: 'SAD', words: ['难过', '低落', 'emo', '孤独', '失落', '想哭', '难受想哭'] },
+  { key: 'ANGRY', words: ['愤怒', '生气', '离谱', '抓狂', '火大', '恼火'] },
 ];
 
-/** 疲劳线索（0-10，越高越累） */
+/** 疲劳线索（0-10，越高越累）
+ *
+ * ⚠️ 修复记录：
+ *   - 删除 '没睡'（2字）：会命中「睡得很好没睡够」等反向表达；
+ *     漏餐/通宵类已由 '一夜没睡'/'通宵'/'整夜' 覆盖
+ *   - 删除 '肝'：会命中「护肝」
+ *   - 删除裸 '忙'：会命中「帮忙」「不忙」（否定式已由匹配层处理，但「帮忙」仍需靠单字防护）
+ *   - 否定式（不太累/不忙/不用开会）由匹配层统一处理
+ */
 const FATIGUE_HINTS = [
-  { score: 9, words: ['通宵', '整夜', '一夜没睡', '凌晨三点', '凌晨四点', '没睡'] },
-  { score: 8, words: ['加班到凌晨', '熬夜', '007', '连续加班', '肝到'] },
-  { score: 7, words: ['加班', '996', '连轴转', '高强度', '肝'] },
+  { score: 9, words: ['通宵', '整夜', '一夜没睡', '凌晨三点', '凌晨四点', '彻夜未眠'] },
+  { score: 8, words: ['加班到凌晨', '熬夜', '007', '连续加班', '肝到', '一夜没合眼'] },
+  { score: 7, words: ['加班', '996', '连轴转', '高强度'] },
   { score: 6, words: ['开会', '会议多', '改需求', '需求变更', '汇报'] },
-  { score: 5, words: ['忙', '赶工', '事情多', '任务多', 'bug多', '修bug'] },
+  { score: 5, words: ['忙碌', '赶工', '事情多', '任务多', 'bug多', '修bug', '事情多'] },
+  // 轻度疲劳：程度副词修饰，权重低
+  { score: 3, words: ['有点累', '轻微累', '稍微累'] },
 ];
 
 /** 饥饿线索
@@ -49,39 +69,53 @@ const FATIGUE_HINTS = [
  * 且否定式优先级高于所有正向词条。
  */
 const HUNGER_LEXICON = [
-  { value: 9, words: ['饿疯', '饿死了', '快饿死', '饿死', '没吃饭', '没吃午饭', '漏餐', '空腹一整天'] },
+  { value: 9, words: ['饿疯', '饿死了', '快饿死', '饿死', '没吃饭', '没吃午饭', '没吃早饭', '漏餐', '空腹一整天'] },
   { value: 8, words: ['很饿', '巨饿', '饿', '饥肠辘辘', '饿坏了'] },
   { value: 7, words: ['有点饿', '轻微饿', '半饱'] },
   { value: 6, words: ['不太饿', '不太想吃', '没胃口', '吃不下'] },
   { value: 8, words: ['想吃', '馋', '嘴馋'] },
 ];
 
-/** 饥饿否定式：出现这些词说明「不想吃 / 不饿」，优先级最高 */
+/** 饥饿否定式：出现这些词说明「不想吃 / 不饿」，优先级最高
+ *
+ * ⚠️ 修复记录：移除了 '没吃早饭'。
+ *   它曾被误归为「无食欲」(hunger=3)，但语义上是**漏餐=很饿**，
+ *   与 '没吃饭'/'没吃午饭'(value 9) 同类。
+ *   修复后 '没吃早饭' 走正向漏餐路径 → hunger=9。
+ */
 const NEG_HUNGER_WORDS = [
   '不想吃', '不想吃饭', '没胃口', '吃不下', '不想吃食', '不饿',
-  '刚吃完', '刚吃过', '吃饱了', '吃撑', '撑了', '不吃了', '没吃早饭',
+  '刚吃完', '刚吃过', '吃饱了', '吃撑', '撑了', '不吃了',
 ];
 
 /** 饮食偏好
  *
- * 注意 PREF_LEXICON 的匹配顺序：SPICY 用裸 '辣'，NO_SPICY 用 '不辣'/'不要辣' 等否定式。
- * 「不辣」会同时命中两者，所以后面 parsePrefs() 会做互斥消歧：
- * 出现否定式时移除 SPICY，避免「不辣」被当成「想吃辣」。
+ * ⚠️ 修复记录：
+ *   - 删除裸单字 '素'：会命中「元素」「维生素」「朴素」「素材」→ 曾判「元素周期表」想吃素
+ *   - 删除裸单字 '拼'：会命中「拼命」→ 曾判「拼了命加班」为分享场景
+ *   - 否定式（不辣/不加辣/不能吃辣）由匹配层 + resolvePrefConflicts 双重处理
+ *
+ * 注意匹配顺序：SPICY 用裸 '辣'，NO_SPICY 用 '不辣'/'不要辣' 等否定式。
+ * 「不辣」会同时命中两者，resolvePrefConflicts() 会移除 SPICY。
  */
 const PREF_LEXICON = [
   { key: 'SPICY', words: ['辣', '香辣', '麻辣', '变态辣'] },
-  { key: 'NO_SPICY', words: ['不辣', '不要辣', '不吃辣', '清淡', '免辣'] },
-  { key: 'VEG', words: ['素', '蔬菜', '沙拉', '清淡', '低卡'] },
+  { key: 'NO_SPICY', words: ['不辣', '不要辣', '不吃辣', '不加辣', '免辣', '戒辣', '清淡'] },
+  { key: 'VEG', words: ['蔬菜', '沙拉', '清淡', '低卡', '素食', '吃素'] },
   { key: 'CHICKEN', words: ['鸡', '鸡肉', '鸡腿', '炸鸡'] },
   { key: 'BEEF', words: ['牛肉', '牛排', '汉堡肉'] },
   { key: 'FRIES', words: ['薯条', '薯'] },
   { key: 'BREAKFAST', words: ['早餐', '早饭', '早上', '通勤'] },
   { key: 'LATE_NIGHT', words: ['夜宵', '宵夜', '深夜', '凌晨'] },
   { key: 'LIGHT', words: ['轻食', '低卡', '减脂', '控卡', '健身'] },
-  { key: 'SHAREABLE', words: ['两个人', '多人', '分享', '拼', '聚餐', '同事一起'] },
+  { key: 'SHAREABLE', words: ['两个人', '多人', '分享', '拼单', '聚餐', '同事一起'] },
 ];
 
-/** 情景词典 */
+/** 情景词典
+ *
+ * ⚠️ 否定式（不加班/不开会/没有deadline/不熬夜）由匹配层统一处理。
+ *    修复前这些输入会污染 scenario → fatigue → emotion 三个字段。
+ */
 const SCENARIO_LEXICON = [
   { key: 'OVERTIME_NIGHT', words: ['加班', '通宵', '熬夜', '凌晨', '007'] },
   { key: 'MEETING', words: ['开会', '会议', '汇报', '评审', '面谈'] },
@@ -159,8 +193,23 @@ function parseBudget(text) {
   m = text.match(/(\d+)\s*(?:毛|角)/);
   if (m) return { value: Number(m[1]) / 10, evidence: m[0] };
 
-  // 3) 阿拉伯数字 + 预算/只有/只剩/就/花了/不超过/控制在/剩
-  m = text.match(/(?:预算|只有|只剩|就|花了|不超过|控制在|剩)\s*(\d+(?:\.\d+)?)/);
+  // 3) 阿拉伯数字 + 预算/只有/只剩/花了/不超过/控制在/剩
+  //    ⚠️ 必须要求货币单位，否则「今天只有3个人」「剩2小时」会被当成金额。
+  //    修复前：`今天只有3个人` → budget=3（完全错误）。
+  m = text.match(
+    /(?:预算|花了|不超过|控制在)\s*(\d+(?:\.\d+)?)\s*(?:元|块|¥|rmb|RMB)?|(\d+(?:\.\d+)?)\s*(?:元|块|¥)/,
+  );
+  if (m) {
+    // 「只有/只剩/剩」这类词后面若跟非货币单位名词，直接放弃
+    const num = Number(m[1] ?? m[2]);
+    const ambiguous = /^(?:只有|只剩|剩)\s*(\d+(?:\.\d+)?)\s*(?!元|块|¥|rmb)/.test(text);
+    if (!ambiguous || m[1] !== undefined) {
+      return { value: num, evidence: m[0] };
+    }
+  }
+
+  // 3b) 「只有/只剩/剩 N 元/block」—— 必须带单位才认
+  m = text.match(/(?:只有|只剩|剩)\s*(\d+(?:\.\d+)?)\s*(元|块|¥|rmb|RMB)/);
   if (m) return { value: Number(m[1]), evidence: m[0] };
 
   // 4) 中文数字 + 元/块/¥（支持到「万」）
@@ -180,6 +229,17 @@ function parseBudget(text) {
   return null;
 }
 
+/** 合法情绪 key（用于 overrides 校验，防止任意字符串进入 describeState） */
+export const VALID_EMOTIONS = Object.freeze([
+  'EXHAUSTED', 'STRESSED', 'BURNED_OUT', 'HAPPY', 'SAD', 'ANGRY', 'NEUTRAL',
+]);
+
+/** 钳制到 0-10 区间 */
+function clamp10(n) {
+  if (!Number.isFinite(n)) return 3;
+  return Math.max(0, Math.min(10, Math.round(n)));
+}
+
 /** 合法偏好 key（与 PREF_LEXICON 的 key 一致，用于 CLI --pref 参数校验与归一化） */
 export const VALID_PREFS = Object.freeze([
   'SPICY', 'NO_SPICY', 'VEG', 'LIGHT', 'CHICKEN', 'BEEF',
@@ -195,7 +255,9 @@ export const VALID_PREFS = Object.freeze([
  *
  * 这里做「大小写不敏感 + 别名映射 + 非法值过滤」，并对未知值给出提示。
  */
-export function normalizePrefs(input = []) {
+export function normalizePrefs(input) {
+  // null/undefined 都应返回空，不应把字符串 "null" 当成未知偏好上报
+  if (input === null || input === undefined) return { prefs: [], unknown: [] };
   const raw = Array.isArray(input) ? input : String(input).split(',');
   const alias = {
     spicy: 'SPICY', hot: 'SPICY', 辣: 'SPICY', 香辣: 'SPICY',
@@ -244,11 +306,118 @@ function resolvePrefConflicts(keys) {
   return [...set];
 }
 
+/** 否定词：出现在命中词条**左侧紧邻位置**时，该命中作废。
+ *
+ * ⚠️ 这是全模块通用机制（真实测试发现的核心缺陷）。
+ *
+ * 之前只在饥饿模块做了否定式消解，导致其他模块「凡是不X句式，系统性反向」：
+ *   不开心   → HAPPY      （正确：SAD）
+ *   不太累   → EXHAUSTED  （正确：不累）
+ *   不加班   → OVERTIME_NIGHT
+ *   不开会   → MEETING
+ *   没有deadline → DEADLINE
+ *   甚至级联放大：情景误判 → fatigue 拉高 → emotion 再被推断成 EXHAUSTED，
+ *   一个否定词污染三个字段。
+ *
+ * 只看紧邻左侧 1 个汉字，符合中文「不/没/无/未 + 词」的构词习惯，
+ * 避免把「不锈钢」「没关系」这类正常词误杀。
+ */
+const NEGATION_PREFIXES = [
+  // 基础单字否定
+  '不', '没', '无', '未', '别', '莫', '甭',
+  // 复合否定（真实审计发现「没有deadline」「不加辣」曾漏判）
+  '没有', '并不', '从不', '毫无', '并非', '不是',
+  // 「不加」「不要」「不用」等动补结构
+  '不加', '不要', '不用', '不吃', '不开', '不做', '不需', '不需要',
+];
+
+/** 判断 text 中 idx 位置的命中是否为否定式 */
+function isNegated(text, idx) {
+  if (idx <= 0) return false;
+  for (const p of NEGATION_PREFIXES) {
+    if (idx >= p.length && text.slice(idx - p.length, idx) === p) return true;
+  }
+  return false;
+}
+
+/**
+ * 需要做单字歧义防护的字符。
+ *
+ * 判定标准：这个单字单独出现时语义不明确，嵌在别的词里会改变含义。
+ *   气 → 天气 / 香气 / 运气
+ *   素 → 元素 / 维生素 / 朴素
+ *   肝 → 护肝（且已从词典删除，这里仅作兜底）
+ *   拼 → 拼命
+ *   烦 → 麻烦
+ *   累 → 累计 / 劳累（且已从词典删除）
+ *   甜/咸/酸/苦 → 甜腻 / 咸鱼 / 酸甜 / 苦楚
+ *
+ * 反之，「辣」不在此列 —— 它是高频明确需求词，
+ * 「想吃辣」「辣的」「麻辣」「香辣」都应命中，加了防护反而全废。
+ */
+function isSingleCharAmbiguous(ch) {
+  return '气素肝拼烦累甜咸酸苦'.includes(ch);
+}
+
+/**
+ * 词条匹配（带否定式与单字边界防护）。
+ *
+ * 三重防护：
+ *   1. 否定式：命中位置左侧紧邻否定词 → 作废
+ *   2. 单字词条：单字（如「气」「素」）要求左侧不是另一个中文词的一部分，
+ *      否则「天气」「元素」「护肝」「想跑步」都会误命中
+ *   3. 英文词条：要求词边界，避免「nm」命中「element」
+ */
+function matchWord(text, lower, word) {
+  const w = word.toLowerCase();
+  const isAscii = /^[\x00-\x7F]+$/.test(word);
+  const isSingleCjk = !isAscii && word.length === 1;
+
+  let from = 0;
+  for (;;) {
+    const idx = lower.indexOf(w, from);
+    if (idx < 0) return -1;
+
+    // 1) 否定式检测
+    if (isNegated(text, idx)) {
+      from = idx + 1;
+      continue;
+    }
+
+    // 2) 单字歧义防护：要求左邻非中文，否则大概率是跨词命中
+    if (isSingleCjk && isSingleCharAmbiguous(word)) {
+      const left = idx > 0 ? text[idx - 1] : '';
+      if (/[\u4e00-\u9fa5]/.test(left)) {
+        from = idx + 1;
+        continue;
+      }
+    }
+
+    // 3) 英文词条要求词边界
+    if (isAscii && /^[a-z0-9]+$/i.test(word)) {
+      const right = idx + word.length < text.length ? lower[idx + word.length] : '';
+      const left2 = idx > 0 ? lower[idx - 1] : '';
+      const isWordChar = (c) => /[a-z0-9]/.test(c);
+      if (isWordChar(right) || isWordChar(left2)) {
+        from = idx + 1;
+        continue;
+      }
+    }
+
+    return idx;
+  }
+}
+
 function countHits(text, words) {
+  const lower = String(text).toLowerCase();
   const found = [];
+  const seen = new Set();
   for (const w of words) {
-    const lower = w.toLowerCase();
-    const idx = text.toLowerCase().indexOf(lower);
+    const key = w.toLowerCase();
+    // 去重：同一词条在词典里重复出现（如 emo 曾写两次）不应重复计分
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const idx = matchWord(text, lower, w);
     if (idx >= 0) found.push({ word: w, index: idx });
   }
   return found.sort((a, b) => a.index - b.index);
@@ -264,12 +433,28 @@ function pickDominant(text, lexicon, limit = 3) {
 }
 
 /**
+ * 收集全部命中项（不截断），按出现位置排序。
+ * 用于偏好这类「集合语义」字段 —— 用户可以同时想吃辣和牛肉。
+ */
+function collectAllMatches(text, lexicon) {
+  return lexicon
+    .map((entry) => ({ entry, hits: countHits(text, entry.words) }))
+    .filter((x) => x.hits.length > 0)
+    .map((x) => ({ key: x.entry.key ?? x.entry.value, hits: x.hits, score: x.hits.length }))
+    .sort((a, b) => a.hits[0].index - b.hits[0].index);
+}
+
+/**
  * 解析人生状态
  * @param {string} input 用户自然语言输入
  * @param {object} [overrides] 追问得到的显式字段（budget/prefs 等）
+ *
+ * ⚠️ overrides 允许为 null —— MCP tool 参数反序列化常得到 null，
+ *    默认参数 `= {}` 只对 undefined 生效，null 会穿透导致 TypeError。
  */
-export function parseLifeState(input = '', overrides = {}) {
-  const text = String(input);
+export function parseLifeState(input = '', overrides) {
+  const text = input === null || input === undefined ? '' : String(input);
+  overrides = overrides && typeof overrides === 'object' ? overrides : {};
   const evidence = [];
   const state = { ...DEFAULT_STATE };
 
@@ -355,7 +540,10 @@ export function parseLifeState(input = '', overrides = {}) {
   }
 
   // 偏好
-  const prefs = pickDominant(text, PREF_LEXICON);
+  // 偏好是「多值集合」语义（用户可以既想吃辣又想吃牛肉），
+  // 不能用 pickDominant 的 top-N 单值策略 —— 修复前 limit=3 会静默丢弃第 4 种口味
+  // （「想吃辣、牛排、鸡腿、薯条」会丢掉 BEEF，且 evidence 与结论不符）。
+  const prefs = collectAllMatches(text, PREF_LEXICON);
   state.prefs = resolvePrefConflicts(prefs.map((p) => p.key));
   if (prefs.length > 0) {
     evidence.push({ field: 'prefs', value: state.prefs, from: prefs.flatMap((p) => p.hits.map((h) => h.word)) });
@@ -399,9 +587,17 @@ export function parseLifeState(input = '', overrides = {}) {
       state.unknownPrefs = unknown;
     }
   }
-  if (typeof overrides.fatigue === 'number') state.fatigue = overrides.fatigue;
-  if (typeof overrides.hunger === 'number') state.hunger = overrides.hunger;
-  if (typeof overrides.emotion === 'string') state.emotion = overrides.emotion;
+  // ⚠️ 数值必须钳制到 0-10。修复前直接赋值，overrides 里的
+  //    fatigue:99 / hunger:-5 / NaN 会穿透到报告（唯一的越界路径）。
+  if (typeof overrides.fatigue === 'number' && Number.isFinite(overrides.fatigue)) {
+    state.fatigue = clamp10(overrides.fatigue);
+  }
+  if (typeof overrides.hunger === 'number' && Number.isFinite(overrides.hunger)) {
+    state.hunger = clamp10(overrides.hunger);
+  }
+  if (typeof overrides.emotion === 'string' && VALID_EMOTIONS.includes(overrides.emotion)) {
+    state.emotion = overrides.emotion;
+  }
 
   // MCP 时间信息融合（来自 now-time-info，非本地推断）
   if (overrides.timeInfo) {
