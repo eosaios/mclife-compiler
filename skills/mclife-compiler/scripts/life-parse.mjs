@@ -39,13 +39,27 @@ const FATIGUE_HINTS = [
   { score: 5, words: ['忙', '赶工', '事情多', '任务多', 'bug多', '修bug'] },
 ];
 
-/** 饥饿线索 */
+/** 饥饿线索
+ *
+ * ⚠️ 否定式陷阱（真实测试发现）：
+ *   「今天不想吃饭」里的「想吃」会命中 value:8 的正向词条，
+ *   导致「不想吃饭」被判为「很饿」，输出与用户表达完全相反的结论。
+ *
+ * 修复：新增 NEG_HUNGER_WORDS，命中否定式时直接反向处理，
+ * 且否定式优先级高于所有正向词条。
+ */
 const HUNGER_LEXICON = [
-  { value: 9, words: ['饿疯', '饿死了', '快饿死', '饿死', '没吃饭', '没吃午饭', '漏餐'] },
-  { value: 8, words: ['很饿', '巨饿', '饿', '饥肠辘辘', '空腹'] },
+  { value: 9, words: ['饿疯', '饿死了', '快饿死', '饿死', '没吃饭', '没吃午饭', '漏餐', '空腹一整天'] },
+  { value: 8, words: ['很饿', '巨饿', '饿', '饥肠辘辘', '饿坏了'] },
   { value: 7, words: ['有点饿', '轻微饿', '半饱'] },
   { value: 6, words: ['不太饿', '不太想吃', '没胃口', '吃不下'] },
   { value: 8, words: ['想吃', '馋', '嘴馋'] },
+];
+
+/** 饥饿否定式：出现这些词说明「不想吃 / 不饿」，优先级最高 */
+const NEG_HUNGER_WORDS = [
+  '不想吃', '不想吃饭', '没胃口', '吃不下', '不想吃食', '不饿',
+  '刚吃完', '刚吃过', '吃饱了', '吃撑', '撑了', '不吃了', '没吃早饭',
 ];
 
 /** 饮食偏好
@@ -79,33 +93,90 @@ const SCENARIO_LEXICON = [
   { key: 'RAINY', words: ['下雨', '暴雨', '台风', '降温'] },
 ];
 
-/** 预算解析：支持「30 元 / 25块 / 三十块 / 预算50 / 50以内 / 一百」 */
-const CN_NUM = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10, 百: 100 };
+/** 预算解析
+ *
+ * 真实测试发现的三个缺口：
+ *   1. 「一千元」解析失败 —— 原实现只覆盖到「百」，遇到「千」直接跳过
+ *   2. 「没钱」「穷」「免费」不识别 —— 这些是明确的零预算表达，
+ *      但原实现返回 null，报告会用 ¥50 默认值，与用户处境矛盾
+ *   3. 「1毛」「5毛」这类小额单位未支持
+ */
+
+/** 中文数字 → 阿拉伯数字，支持到「万」 */
+function cnNumberToArabic(cn) {
+  const digits = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const units = { 十: 10, 百: 100, 千: 1000, 万: 10000 };
+
+  // 纯数字形式（如「三十」）
+  if (!/[十百千万]/.test(cn)) {
+    return digits[cn] ?? 0;
+  }
+
+  let total = 0; // 已结算到「万」以上的部分
+  let section = 0; // 当前「千/百/十」段
+  let current = 0; // 当前待结算数字
+  let matched = false;
+
+  for (const ch of cn) {
+    if (digits[ch] !== undefined) {
+      current = digits[ch];
+      matched = true;
+    } else if (units[ch] !== undefined) {
+      const u = units[ch];
+      if (u === 10000) {
+        // 「万」结算：前面累积的总和 × 10000
+        total += (section + current || 1) * u;
+        section = 0;
+        current = 0;
+      } else {
+        // 「十/百/千」：前面没有数字时默认为 1（十二 = 12）
+        section += (current || 1) * u;
+        current = 0;
+      }
+      matched = true;
+    }
+  }
+  return matched ? total + section + current : 0;
+}
+
+/** 明确表示「没有钱」的表达 → 视为 0 元预算 */
+const ZERO_BUDGET_WORDS = [
+  '没钱', '没预算', '穷', '免费', '不要钱', '不花钱', '不点', '没钱点',
+  '身上没', '穷得', '吃土', '月底', '发工资前', '等发工资',
+];
 
 function parseBudget(text) {
-  // 阿拉伯数字：优先 数字 + 元/块/¥
+  // 0) 明确零预算表达（要在数字解析之前，避免「月底」被当成别的）
+  for (const w of ZERO_BUDGET_WORDS) {
+    if (text.includes(w)) return { value: 0, evidence: w };
+  }
+
+  // 1) 阿拉伯数字 + 元/块/¥/rmb
   let m = text.match(/(\d+(?:\.\d+)?)\s*(?:元|块|¥|rmb|RMB|软妹币)/);
   if (m) return { value: Number(m[1]), evidence: m[0] };
 
-  // 阿拉伯数字 + 预算/以内/够
+  // 2) 小额单位：1毛 / 5毛 / 2块5 毛
+  m = text.match(/(\d+)\s*(?:毛|角)/);
+  if (m) return { value: Number(m[1]) / 10, evidence: m[0] };
+
+  // 3) 阿拉伯数字 + 预算/只有/只剩/就/花了/不超过/控制在/剩
   m = text.match(/(?:预算|只有|只剩|就|花了|不超过|控制在|剩)\s*(\d+(?:\.\d+)?)/);
   if (m) return { value: Number(m[1]), evidence: m[0] };
 
-  // 中文数字
-  const cnMatch = text.match(/([一二两三四五六七八九十百]+)\s*(?:元|块|¥)/);
+  // 4) 中文数字 + 元/块/¥（支持到「万」）
+  const cnMatch = text.match(/([零一二两三四五六七八九十百千万]+)\s*(?:元|块|¥)/);
   if (cnMatch) {
-    const cn = cnMatch[1];
-    let val = 0;
-    if (cn.includes('十')) {
-      const [tens, ones] = cn.split('十');
-      val = (CN_NUM[tens] || 1) * 10 + (ones ? CN_NUM[ones] : 0);
-    } else if (cn.includes('百')) {
-      val = 100;
-    } else {
-      val = CN_NUM[cn] ?? 0;
-    }
+    const val = cnNumberToArabic(cnMatch[1]);
     if (val > 0) return { value: val, evidence: cnMatch[0] };
   }
+
+  // 5) 中文数字 + 预算/只有/只剩（同样支持千/万）
+  const cnMatch2 = text.match(/(?:预算|只有|只剩|剩)\s*([零一二两三四五六七八九十百千万]+)\s*(?:元|块)?/);
+  if (cnMatch2) {
+    const val = cnNumberToArabic(cnMatch2[1]);
+    if (val > 0) return { value: val, evidence: cnMatch2[0] };
+  }
+
   return null;
 }
 
@@ -173,7 +244,8 @@ function resolvePrefConflicts(keys) {
   return [...set];
 }
 
-function countHits(text, words) {  const found = [];
+function countHits(text, words) {
+  const found = [];
   for (const w of words) {
     const lower = w.toLowerCase();
     const idx = text.toLowerCase().indexOf(lower);
@@ -232,15 +304,47 @@ export function parseLifeState(input = '', overrides = {}) {
   // 饥饿
   let hunger = null;
   const hungerHits = [];
-  for (const entry of HUNGER_LEXICON) {
-    const hits = countHits(text, entry.words);
-    if (hits.length > 0) hungerHits.push(...hits.map((h) => ({ ...h, value: entry.value })));
-  }
-  if (hungerHits.length > 0) {
-    // 「饿」比「想吃」更能说明生理饥饿，取最高值
-    hunger = Math.max(...hungerHits.map((h) => h.value));
-    state.hunger = Math.min(10, hunger);
-    evidence.push({ field: 'hunger', value: state.hunger, from: hungerHits.map((h) => h.word) });
+  // 否定式优先：「不想吃饭」「刚吃完」不能被判为「很饿」
+  const negHungerHits = countHits(text, NEG_HUNGER_WORDS);
+
+  if (negHungerHits.length > 0) {
+    // 明确表示不饿/吃不下 → hunger 取低值
+    const isSatiated = /刚吃完|刚吃过|吃饱了|吃撑|撑了|不饿/.test(negHungerHits.map((h) => h.word).join(''));
+    hunger = isSatiated ? 1 : 3;
+    state.hunger = hunger; // ← 之前漏了这行，导致 evidence 有值但 state 为 null
+    evidence.push({
+      field: 'hunger',
+      value: hunger,
+      from: negHungerHits.map((h) => h.word),
+      note: isSatiated ? '已进食' : '无食欲',
+    });
+  } else {
+    for (const entry of HUNGER_LEXICON) {
+      const hits = countHits(text, entry.words);
+      if (hits.length > 0) hungerHits.push(...hits.map((h) => ({ ...h, value: entry.value })));
+    }
+    if (hungerHits.length > 0) {
+      // 精度优先：更长/更具体的词条覆盖更泛的词条。
+      // 真实测试发现：若只取 max，「有点饿」会因同时命中泛词「饿」被抬到 8，
+      // 而它的本意只是轻微饥饿（7）。
+      // 做法：若命中了带修饰的精确词条（词长 > 2 且含程度副词），用精确词条的值。
+      const PRECISE = /有点|轻微|稍微|有点点|不太|比较/;
+      const preciseHits = hungerHits.filter((h) => PRECISE.test(h.word));
+      if (preciseHits.length > 0) {
+        hunger = Math.min(...preciseHits.map((h) => h.value));
+        evidence.push({
+          field: 'hunger',
+          value: hunger,
+          from: preciseHits.map((h) => h.word),
+          note: '按程度副词精确匹配（覆盖泛化词条）',
+        });
+      } else {
+        // 「饿」比「想吃」更能说明生理饥饿，取最高值
+        hunger = Math.max(...hungerHits.map((h) => h.value));
+        evidence.push({ field: 'hunger', value: hunger, from: hungerHits.map((h) => h.word) });
+      }
+      state.hunger = Math.min(10, hunger);
+    }
   }
 
   // 预算

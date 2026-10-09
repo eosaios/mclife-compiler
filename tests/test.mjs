@@ -492,6 +492,89 @@ t('无效偏好值被记入 unknownPrefs 供提示', () => {
   eq(s.unknownPrefs, ['INVALID']);
 });
 
+console.log('\n── 饥饿否定式与精度（真实测试发现）──');
+
+t('「不想吃饭」不应被判为很饿（回归：曾命中「想吃」=8）', () => {
+  ok(parseLifeState('今天不想吃饭').hunger <= 3, `实际 ${parseLifeState('今天不想吃饭').hunger}`);
+});
+
+t('「刚吃完」判定为已进食', () => {
+  const h = parseLifeState('刚吃完').hunger;
+  ok(h !== null && h <= 2, `实际 ${h}`);
+});
+
+t('「吃饱了撑的」判定为已进食', () => {
+  ok(parseLifeState('吃饱了撑的').hunger <= 2);
+});
+
+t('「没胃口」判定为无食欲而非饥饿', () => {
+  ok(parseLifeState('没胃口').hunger <= 3);
+});
+
+t('「不饿」不被误判为饥饿', () => {
+  ok(parseLifeState('不饿').hunger <= 2);
+});
+
+t('「有点饿」按程度副词取 7，不被泛词「饿」抬到 8（回归）', () => {
+  eq(parseLifeState('有点饿').hunger, 7);
+});
+
+t('「稍微有点饿」同样取 7', () => {
+  eq(parseLifeState('稍微有点饿').hunger, 7);
+});
+
+t('「不太饿」取 6', () => {
+  eq(parseLifeState('不太饿').hunger, 6);
+});
+
+t('真实饥饿词仍正确', () => {
+  eq(parseLifeState('饿死了').hunger, 9);
+  eq(parseLifeState('很饿').hunger, 8);
+});
+
+console.log('\n── 预算解析扩展（真实测试发现）──');
+
+t('「一千元」解析为 1000（回归：原实现只覆盖到百）', () => {
+  eq(parseLifeState('一千元').budget, 1000);
+});
+
+t('「两千块」解析为 2000', () => {
+  eq(parseLifeState('两千块').budget, 2000);
+});
+
+t('「一万」解析为 10000', () => {
+  eq(parseLifeState('一万块').budget, 10000);
+});
+
+t('「三百五十元」复合中文数字', () => {
+  eq(parseLifeState('三百五十元').budget, 350);
+});
+
+t('「没钱」视为 0 元预算（回归：曾返回 null → 用默认 ¥50）', () => {
+  eq(parseLifeState('今天没钱').budget, 0);
+});
+
+t('「穷」视为 0 元预算', () => {
+  eq(parseLifeState('太穷了').budget, 0);
+});
+
+t('「免费」视为 0 元预算', () => {
+  eq(parseLifeState('有免费的吗').budget, 0);
+});
+
+t('「月底吃土」视为 0 元预算', () => {
+  eq(parseLifeState('月底吃土').budget, 0);
+});
+
+t('「5毛」解析为 0.5 元', () => {
+  eq(parseLifeState('还有5毛').budget, 0.5);
+});
+
+t('预算 0 仍能正确区分于「未提供」', () => {
+  eq(parseLifeState('预算只有 0 元').budget, 0);
+  eq(parseLifeState('今天').budget, null);
+});
+
 console.log('\n── 边界与安全 ──');
 
 t('空输入不崩溃', () => {
